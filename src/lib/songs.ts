@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { songPinyin, titlePinyin } from "@/lib/pinyin";
 
 // Supabase types regenerate after migrations propagate; cast to keep
 // the build green meanwhile.
@@ -8,8 +9,10 @@ const db = supabase as any;
 export type Song = {
   id: string;
   title: string;
+  title_en: string;
   description: string;
   lyrics: string;
+  lyrics_en: string;
   pinyin: string;
   score_url: string;
   video_url: string;
@@ -74,6 +77,8 @@ export async function searchSongs(opts: {
       [
         `tags_text.ilike.${like}`,
         `title.ilike.${like}`,
+        `title_en.ilike.${like}`,
+        `lyrics_en.ilike.${like}`,
         `description.ilike.${like}`,
       ].join(","),
     );
@@ -161,8 +166,11 @@ export function matchesSong(song: Song, query: string): boolean {
   if (!query.trim()) return true;
   const tokens = tokenizeQuery(query);
   if (tokens.length === 0) return true;
+  // Pinyin is generated on the fly (cached) so titles/lyrics are searchable by pinyin
+  // without storing it. Falls back to any stored pinyin value inside songPinyin().
+  const py = `${titlePinyin(song.title)} ${songPinyin(song)}`;
   const haystack = normalize(
-    `${song.title} ${song.description} ${song.lyrics} ${song.pinyin} ${(song.tags ?? []).join(" ")}`,
+    `${song.title} ${song.title_en ?? ""} ${song.description} ${song.lyrics} ${song.lyrics_en ?? ""} ${py} ${(song.tags ?? []).join(" ")}`,
   );
   // Every token must appear somewhere — supports partial pinyin like "ye su ai".
   return tokens.every((t) => haystack.includes(t));

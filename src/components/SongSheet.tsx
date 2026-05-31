@@ -4,6 +4,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
+import { songPinyin } from "@/lib/pinyin";
 import { useFavorites } from "@/hooks/use-favorites";
 
 interface Props {
@@ -41,10 +42,28 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
   // Used to announce the active stanza to assistive tech.
   const [announcement, setAnnouncement] = useState("");
 
+  // Language tab: 中文 (zh) vs English (en) version of the song's lyrics/title.
+  const [lang, setLang] = useState<"zh" | "en">("zh");
+  const hasEnglish = Boolean(song?.lyrics_en?.trim() || song?.title_en?.trim());
+  // Reset to Chinese whenever a different song opens.
+  useEffect(() => {
+    setLang("zh");
+  }, [song?.id]);
+  // The lyrics shown depend on the active language tab.
+  const activeLyrics =
+    lang === "en" && song?.lyrics_en?.trim() ? song.lyrics_en : (song?.lyrics ?? "");
+  const displayTitle =
+    lang === "en" && song?.title_en?.trim() ? song.title_en : (song?.title ?? "");
+  // Hanyu pinyin generated from the Chinese lyrics (cached), never stored.
+  const pinyinText = useMemo(
+    () => (song ? songPinyin(song) : ""),
+    [song?.id, song?.lyrics],
+  );
+
   // Lyric stanza count drives keyboard navigation bounds + the versioned key.
   const lyricStanzaCount = useMemo(
-    () => (song?.lyrics ? song.lyrics.split(/\n\s*\n/).length : 0),
-    [song?.lyrics],
+    () => (activeLyrics ? activeLyrics.split(/\n\s*\n/).length : 0),
+    [activeLyrics],
   );
 
   // Restore the previously locked stanza for this song from localStorage.
@@ -160,10 +179,36 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                     Worship Song · 诗歌
                   </p>
                   <h2 className="font-serif-display text-3xl sm:text-4xl font-medium text-foreground leading-tight break-words">
-                    {song.title}
+                    {displayTitle}
                   </h2>
+                  {/* Show the other-language title underneath, when present */}
+                  {lang === "zh" && song.title_en?.trim() && (
+                    <p className="mt-1 text-base text-muted-foreground italic break-words">
+                      {song.title_en}
+                    </p>
+                  )}
+                  {lang === "en" && song.title?.trim() && (
+                    <p className="mt-1 font-cn text-base text-muted-foreground break-words">
+                      {song.title}
+                    </p>
+                  )}
+                  {/* 中文 / English language tab — only when an English version exists */}
+                  {hasEnglish && (
+                    <div
+                      role="tablist"
+                      aria-label="Lyrics language"
+                      className="mt-4 inline-flex rounded-full border border-border p-0.5 bg-secondary/40"
+                    >
+                      <LangTab active={lang === "zh"} onClick={() => { setLang("zh"); setActiveStanza(null); }}>
+                        中文
+                      </LangTab>
+                      <LangTab active={lang === "en"} onClick={() => { setLang("en"); setActiveStanza(null); }}>
+                        English
+                      </LangTab>
+                    </div>
+                  )}
                   {song.description && (
-                    <p className="mt-2 text-sm text-muted-foreground italic">
+                    <p className="mt-3 text-sm text-muted-foreground italic">
                       {song.description}
                     </p>
                   )}
@@ -254,27 +299,33 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                   );
                 })()}
 
-              {/* Lyrics */}
-              {song.lyrics && (
+              {/* Lyrics — Chinese or English depending on the active language tab */}
+              {activeLyrics && (
                 <section>
-                  <SectionLabel>Lyrics · 歌词</SectionLabel>
+                  <SectionLabel>
+                    {lang === "en" ? "Lyrics · English" : "Lyrics · 歌词"}
+                  </SectionLabel>
                   <Stanzas
-                    text={song.lyrics}
+                    text={activeLyrics}
                     tokens={tokens}
                     active={activeStanza}
                     onSelect={setActiveStanza}
                   ariaLabelPrefix="Lyrics stanza"
-                    className="lyric-text font-cn text-foreground"
+                    className={
+                      lang === "en"
+                        ? "lyric-text text-foreground"
+                        : "lyric-text font-cn text-foreground"
+                    }
                   />
                 </section>
               )}
 
-              {/* Pinyin */}
-              {song.pinyin && (
+              {/* Pinyin — generated on the fly, only for the Chinese version */}
+              {lang === "zh" && pinyinText && (
                 <section>
                   <SectionLabel>Hanyu Pinyin</SectionLabel>
                   <Stanzas
-                    text={song.pinyin}
+                    text={pinyinText}
                     tokens={tokens}
                     active={activeStanza}
                     onSelect={setActiveStanza}
@@ -314,6 +365,34 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** A single 中文 / English tab button in the language switcher. */
+function LangTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={
+        "px-4 py-1.5 rounded-full text-sm transition-colors " +
+        (active
+          ? "bg-foreground text-background shadow-sm"
+          : "text-muted-foreground hover:text-foreground")
+      }
+    >
+      {children}
+    </button>
   );
 }
 

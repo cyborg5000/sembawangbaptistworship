@@ -22,8 +22,10 @@ interface Props {
 
 const empty: SongInput = {
   title: "",
+  title_en: "",
   description: "",
   lyrics: "",
+  lyrics_en: "",
   pinyin: "",
   score_url: "",
   video_url: "",
@@ -40,8 +42,10 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props)
         initial
           ? {
               title: initial.title,
+              title_en: initial.title_en ?? "",
               description: initial.description,
               lyrics: initial.lyrics,
+              lyrics_en: initial.lyrics_en ?? "",
               pinyin: initial.pinyin,
               score_url: initial.score_url,
               video_url: initial.video_url,
@@ -83,8 +87,16 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props)
             <Input
               value={form.title}
               onChange={(e) => update("title", e.target.value)}
-              placeholder="奇异恩典 / Amazing Grace"
+              placeholder="奇异恩典"
+              className="font-cn"
               required
+            />
+          </Field>
+          <Field label="English title">
+            <Input
+              value={form.title_en}
+              onChange={(e) => update("title_en", e.target.value)}
+              placeholder="Amazing Grace"
             />
           </Field>
           <Field label="Description 描述">
@@ -121,14 +133,15 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props)
               placeholder={"奇异恩典 何等甘甜\n我罪已得赦免..."}
             />
           </Field>
-          <Field label="Hanyu Pinyin">
+          <Field label="English lyrics">
             <Textarea
-              value={form.pinyin}
-              onChange={(e) => update("pinyin", e.target.value)}
-              rows={4}
-              placeholder="qí yì ēn diǎn hé děng gān tián..."
+              value={form.lyrics_en}
+              onChange={(e) => update("lyrics_en", e.target.value)}
+              rows={6}
+              placeholder={"Amazing grace, how sweet the sound\nThat saved a wretch like me..."}
             />
           </Field>
+          {/* Hanyu pinyin is generated automatically from the Chinese lyrics — not stored. */}
           <Field label="Score URL (image or PDF)">
             <Input
               value={form.score_url}

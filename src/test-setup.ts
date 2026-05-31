@@ -25,5 +25,23 @@ if (!("matchMedia" in window)) {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  window.localStorage.clear();
+  window.localStorage?.clear();
 });
+
+// happy-dom doesn't always provide localStorage — polyfill a minimal one.
+if (!("localStorage" in window) || !window.localStorage) {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    },
+  });
+}
