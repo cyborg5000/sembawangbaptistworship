@@ -9,13 +9,12 @@ import {
   createSong,
   deleteSong,
   fetchSongs,
-  matchesSong,
   normalizeTags,
-  searchSongs,
   updateSong,
   type Song,
   type SongInput,
 } from "@/lib/songs";
+import { buildSongIndex, searchRanked } from "@/lib/search";
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
 import { SongFormDialog } from "@/components/SongFormDialog";
@@ -43,8 +42,8 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const qc = useQueryClient();
-  // Full library: drives the tag filter bar + counts.
-  const { data: allSongs = [] } = useQuery({
+  // Full library: drives the ranked search, tag filter bar + counts.
+  const { data: allSongs = [], isLoading } = useQuery({
     queryKey: ["songs", "all"],
     queryFn: fetchSongs,
   });
@@ -59,18 +58,14 @@ function Index() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Song | null>(null);
 
-  // Debounce the typed query before sending it to the server.
+  // Debounce the typed query before searching.
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(id);
   }, [query]);
 
-  // Server-side search — uses trigram index on tags_text/title +
-  // GIN containment for selected tag chips.
-  const { data: serverSongs = [], isLoading } = useQuery({
-    queryKey: ["songs", "search", debouncedQuery, selectedTags],
-    queryFn: () => searchSongs({ query: debouncedQuery, tags: selectedTags }),
-  });
+  // Smart ranked fuzzy index over the whole library (rebuilt only when songs change).
+  const fuse = useMemo(() => buildSongIndex(allSongs), [allSongs]);
 
   // All tags across songs (normalized + sorted by frequency, then alphabetical).
   const allTags = useMemo(() => {
@@ -91,13 +86,16 @@ function Index() {
     );
 
   const filtered = useMemo(() => {
-    let list = serverSongs;
+    // Ranked fuzzy search when there's a query; otherwise the full list (A–Z).
+    let list = debouncedQuery.trim() ? searchRanked(fuse, debouncedQuery) : allSongs;
+    // Tag chips: AND semantics — keep songs carrying every selected tag.
+    if (selectedTags.length > 0)
+      list = list.filter((s) =>
+        selectedTags.every((t) => (s.tags ?? []).includes(t)),
+      );
     if (view === "favorites") list = list.filter((s) => favorites.includes(s.id));
-    // Client refinement: matchesSong handles pinyin tones / CJK that
-    // server ILIKE can't express. Server already pre-filtered tags + ASCII.
-    if (debouncedQuery.trim()) list = list.filter((s) => matchesSong(s, debouncedQuery));
     return list;
-  }, [serverSongs, debouncedQuery, view, favorites]);
+  }, [fuse, allSongs, debouncedQuery, selectedTags, view, favorites]);
 
   const createMut = useMutation({
     mutationFn: (input: SongInput) => createSong(input),
