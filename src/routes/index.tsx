@@ -222,6 +222,18 @@ function Index() {
                         {s.description || s.pinyin.split("\n")[0]}
                       </p>
                     )}
+                    {s.tags && s.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {s.tags.slice(0, 6).map((t) => (
+                          <span
+                            key={t}
+                            className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"

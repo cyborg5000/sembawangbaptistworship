@@ -16,6 +16,7 @@ const song = (over: Partial<Song> = {}): Song => ({
   pinyin: "",
   score_url: "",
   video_url: "",
+  tags: [],
   created_at: "",
   updated_at: "",
   ...over,
