@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, Music, Plus, Search, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
   fetchSongs,
   matchesSong,
   normalizeTags,
+  searchSongs,
   updateSong,
   type Song,
   type SongInput,
@@ -18,6 +19,7 @@ import {
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
 import { SongFormDialog } from "@/components/SongFormDialog";
+import { TagFilterBar } from "@/components/TagFilterBar";
 import logoUrl from "@/assets/sbc-logo.png";
 
 export const Route = createFileRoute("/")({
@@ -41,13 +43,15 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const qc = useQueryClient();
-  const { data: songs = [], isLoading } = useQuery({
-    queryKey: ["songs"],
+  // Full library: drives the tag filter bar + counts.
+  const { data: allSongs = [] } = useQuery({
+    queryKey: ["songs", "all"],
     queryFn: fetchSongs,
   });
   const { favorites, isFavorite, toggle } = useFavorites();
 
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [view, setView] = useState<"all" | "favorites">("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeSong, setActiveSong] = useState<Song | null>(null);
@@ -55,10 +59,23 @@ function Index() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Song | null>(null);
 
+  // Debounce the typed query before sending it to the server.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  // Server-side search — uses trigram index on tags_text/title +
+  // GIN containment for selected tag chips.
+  const { data: serverSongs = [], isLoading } = useQuery({
+    queryKey: ["songs", "search", debouncedQuery, selectedTags],
+    queryFn: () => searchSongs({ query: debouncedQuery, tags: selectedTags }),
+  });
+
   // All tags across songs (normalized + sorted by frequency, then alphabetical).
   const allTags = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const s of songs) {
+    for (const s of allSongs) {
       for (const t of normalizeTags(s.tags)) {
         counts.set(t, (counts.get(t) ?? 0) + 1);
       }
@@ -66,7 +83,7 @@ function Index() {
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([tag, count]) => ({ tag, count }));
-  }, [songs]);
+  }, [allSongs]);
 
   const toggleTag = (tag: string) =>
     setSelectedTags((cur) =>
@@ -74,17 +91,13 @@ function Index() {
     );
 
   const filtered = useMemo(() => {
-    let list = songs;
+    let list = serverSongs;
     if (view === "favorites") list = list.filter((s) => favorites.includes(s.id));
-    if (selectedTags.length > 0) {
-      list = list.filter((s) => {
-        const tags = normalizeTags(s.tags);
-        return selectedTags.every((t) => tags.includes(t));
-      });
-    }
-    if (query.trim()) list = list.filter((s) => matchesSong(s, query));
+    // Client refinement: matchesSong handles pinyin tones / CJK that
+    // server ILIKE can't express. Server already pre-filtered tags + ASCII.
+    if (debouncedQuery.trim()) list = list.filter((s) => matchesSong(s, debouncedQuery));
     return list;
-  }, [songs, query, view, favorites, selectedTags]);
+  }, [serverSongs, debouncedQuery, view, favorites]);
 
   const createMut = useMutation({
     mutationFn: (input: SongInput) => createSong(input),
@@ -195,7 +208,7 @@ function Index() {
 
         <div className="mt-6 flex items-center gap-1">
           <FilterChip active={view === "all"} onClick={() => setView("all")}>
-            All <span className="ml-2 text-xs text-muted-foreground">{songs.length}</span>
+            All <span className="ml-2 text-xs text-muted-foreground">{allSongs.length}</span>
           </FilterChip>
           <FilterChip active={view === "favorites"} onClick={() => setView("favorites")}>
             <Heart className="h-3.5 w-3.5 mr-2" /> Favourites
@@ -204,48 +217,12 @@ function Index() {
         </div>
 
         {allTags.length > 0 && (
-          <div className="mt-6">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Tags · 标签
-              </span>
-              {selectedTags.length > 0 && (
-                <button
-                  onClick={() => setSelectedTags([])}
-                  className="text-[11px] uppercase tracking-wider text-accent hover:underline"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {allTags.map(({ tag, count }) => {
-                const active = selectedTags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={
-                      "inline-flex items-center rounded-full px-3 py-1 text-xs transition-colors " +
-                      (active
-                        ? "bg-accent text-accent-foreground"
-                        : "bg-secondary text-muted-foreground hover:text-foreground")
-                    }
-                  >
-                    {tag}
-                    <span
-                      className={
-                        "ml-1.5 text-[10px] " +
-                        (active ? "opacity-80" : "opacity-60")
-                      }
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <TagFilterBar
+            tags={allTags}
+            selected={selectedTags}
+            onToggle={toggleTag}
+            onClear={() => setSelectedTags([])}
+          />
         )}
       </section>
 
@@ -254,7 +231,7 @@ function Index() {
         {isLoading ? (
           <EmptyState icon={<Music />} title="Loading songs…" />
         ) : filtered.length === 0 ? (
-          songs.length === 0 ? (
+          allSongs.length === 0 ? (
             <EmptyState
               icon={<Music />}
               title="No songs yet"

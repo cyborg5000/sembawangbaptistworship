@@ -23,6 +23,7 @@ export type Database = {
           pinyin: string | null
           score_url: string | null
           tags: string[]
+          tags_text: string
           title: string
           updated_at: string
           video_url: string | null
@@ -35,6 +36,7 @@ export type Database = {
           pinyin?: string | null
           score_url?: string | null
           tags?: string[]
+          tags_text?: string
           title: string
           updated_at?: string
           video_url?: string | null
@@ -47,6 +49,7 @@ export type Database = {
           pinyin?: string | null
           score_url?: string | null
           tags?: string[]
+          tags_text?: string
           title?: string
           updated_at?: string
           video_url?: string | null

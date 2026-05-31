@@ -44,6 +44,46 @@ export async function fetchSongs(): Promise<Song[]> {
   return (data ?? []) as Song[];
 }
 
+/** Escape PostgREST ILIKE pattern wildcards in a user-supplied query. */
+function escapeIlike(s: string): string {
+  return s.replace(/[\\%_,]/g, (c) => "\\" + c);
+}
+
+/**
+ * Server-side search. Tag filters use the GIN index on `tags`; partial
+ * text matches use the trigram index on `tags_text`/`title`. Client code
+ * may still apply `matchesSong` afterwards for pinyin/CJK nuance.
+ */
+export async function searchSongs(opts: {
+  query?: string;
+  tags?: string[];
+}): Promise<Song[]> {
+  const q = (opts.query ?? "").trim();
+  const tags = normalizeTags(opts.tags);
+  let req = db.from("songs").select("*").order("title", { ascending: true });
+
+  // Exact-tag chip filter — AND semantics via array containment (GIN-backed).
+  if (tags.length > 0) req = req.contains("tags", tags);
+
+  // ASCII queries → push partial-text matching to the database (trigram).
+  // Non-ASCII (CJK / accented pinyin) falls through to client matchesSong,
+  // which understands tone-folding and ü/v variants.
+  if (q && /^[\x20-\x7e]+$/.test(q)) {
+    const like = `*${escapeIlike(q)}*`;
+    req = req.or(
+      [
+        `tags_text.ilike.${like}`,
+        `title.ilike.${like}`,
+        `description.ilike.${like}`,
+      ].join(","),
+    );
+  }
+
+  const { data, error } = await req;
+  if (error) throw error;
+  return (data ?? []) as Song[];
+}
+
 export async function createSong(input: SongInput): Promise<Song> {
   const payload = { ...input, tags: normalizeTags(input.tags) };
   const { data, error } = await db
