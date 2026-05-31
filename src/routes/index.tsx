@@ -10,6 +10,7 @@ import {
   deleteSong,
   fetchSongs,
   matchesSong,
+  normalizeTags,
   updateSong,
   type Song,
   type SongInput,
@@ -48,17 +49,42 @@ function Index() {
 
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"all" | "favorites">("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Song | null>(null);
 
+  // All tags across songs (normalized + sorted by frequency, then alphabetical).
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of songs) {
+      for (const t of normalizeTags(s.tags)) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([tag, count]) => ({ tag, count }));
+  }, [songs]);
+
+  const toggleTag = (tag: string) =>
+    setSelectedTags((cur) =>
+      cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag],
+    );
+
   const filtered = useMemo(() => {
     let list = songs;
     if (view === "favorites") list = list.filter((s) => favorites.includes(s.id));
+    if (selectedTags.length > 0) {
+      list = list.filter((s) => {
+        const tags = normalizeTags(s.tags);
+        return selectedTags.every((t) => tags.includes(t));
+      });
+    }
     if (query.trim()) list = list.filter((s) => matchesSong(s, query));
     return list;
-  }, [songs, query, view, favorites]);
+  }, [songs, query, view, favorites, selectedTags]);
 
   const createMut = useMutation({
     mutationFn: (input: SongInput) => createSong(input),
@@ -176,6 +202,51 @@ function Index() {
             <span className="ml-2 text-xs text-muted-foreground">{favorites.length}</span>
           </FilterChip>
         </div>
+
+        {allTags.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Tags · 标签
+              </span>
+              {selectedTags.length > 0 && (
+                <button
+                  onClick={() => setSelectedTags([])}
+                  className="text-[11px] uppercase tracking-wider text-accent hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {allTags.map(({ tag, count }) => {
+                const active = selectedTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className={
+                      "inline-flex items-center rounded-full px-3 py-1 text-xs transition-colors " +
+                      (active
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-secondary text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {tag}
+                    <span
+                      className={
+                        "ml-1.5 text-[10px] " +
+                        (active ? "opacity-80" : "opacity-60")
+                      }
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* List */}
