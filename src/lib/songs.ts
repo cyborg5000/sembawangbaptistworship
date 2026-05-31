@@ -63,14 +63,40 @@ function normalize(s: string): string {
     .replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
 }
 
+/** Normalize but keep spaces as token separators (for partial-token matching). */
+function normalizeKeepSpaces(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\u4e00-\u9fff\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Split a query into tokens (CJK chars become individual tokens). */
+export function tokenizeQuery(query: string): string[] {
+  const normalized = normalizeKeepSpaces(query);
+  if (!normalized) return [];
+  const tokens: string[] = [];
+  for (const chunk of normalized.split(" ")) {
+    if (!chunk) continue;
+    // Split CJK runs into individual characters; keep latin runs whole.
+    const parts = chunk.match(/[\u4e00-\u9fff]|[a-z0-9]+/g);
+    if (parts) tokens.push(...parts);
+  }
+  return tokens;
+}
+
 export function matchesSong(song: Song, query: string): boolean {
   if (!query.trim()) return true;
-  const q = normalize(query);
-  if (!q) return true;
+  const tokens = tokenizeQuery(query);
+  if (tokens.length === 0) return true;
   const haystack = normalize(
     `${song.title} ${song.description} ${song.lyrics} ${song.pinyin}`,
   );
-  return haystack.includes(q);
+  // Every token must appear somewhere — supports partial pinyin like "ye su ai".
+  return tokens.every((t) => haystack.includes(t));
 }
 
 /** Returns YouTube embed URL if input is a YouTube link, else null */
