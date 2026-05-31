@@ -57,11 +57,11 @@ export function TagFilterBar({ tags, selected, onToggle, onClear }: TagFilterBar
         focusAt(tags.length - 1);
         break;
       case "Escape":
+        e.preventDefault();
         if (selected.length > 0) {
-          e.preventDefault();
           onClear();
-          setAnnouncement("All tag filters cleared");
         }
+        setAnnouncement("All tag filters cleared");
         break;
     }
   };
