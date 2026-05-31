@@ -167,6 +167,18 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                       {song.description}
                     </p>
                   )}
+                  {song.tags && song.tags.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {song.tags.map((t) => (
+                        <span
+                          key={t}
+                          className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button
