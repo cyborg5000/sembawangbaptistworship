@@ -20,6 +20,21 @@ export type Song = {
 
 export type SongInput = Omit<Song, "id" | "created_at" | "updated_at">;
 
+/** Normalize a list of tags: trim, lowercase, drop empties, dedupe (stable order). */
+export function normalizeTags(tags: readonly string[] | null | undefined): string[] {
+  if (!tags) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const t = raw.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!t) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
 export async function fetchSongs(): Promise<Song[]> {
   const { data, error } = await db
     .from("songs")
@@ -30,9 +45,10 @@ export async function fetchSongs(): Promise<Song[]> {
 }
 
 export async function createSong(input: SongInput): Promise<Song> {
+  const payload = { ...input, tags: normalizeTags(input.tags) };
   const { data, error } = await db
     .from("songs")
-    .insert(input)
+    .insert(payload)
     .select()
     .single();
   if (error) throw error;
@@ -40,9 +56,14 @@ export async function createSong(input: SongInput): Promise<Song> {
 }
 
 export async function updateSong(id: string, input: Partial<SongInput>): Promise<Song> {
+  const payload: Record<string, unknown> = {
+    ...input,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.tags !== undefined) payload.tags = normalizeTags(input.tags);
   const { data, error } = await db
     .from("songs")
-    .update({ ...input, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq("id", id)
     .select()
     .single();
