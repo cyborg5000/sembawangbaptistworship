@@ -230,7 +230,7 @@ function Index() {
         {isLoading ? (
           <EmptyState icon={<Music />} title="Loading songs…" />
         ) : filtered.length === 0 ? (
-          songs.length === 0 ? (
+          allSongs.length === 0 ? (
             <EmptyState
               icon={<Music />}
               title="No songs yet"
