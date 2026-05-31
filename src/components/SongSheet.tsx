@@ -1,5 +1,6 @@
-import { useMemo, useState, useEffect, useRef } from "react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
@@ -14,43 +15,88 @@ interface Props {
   query?: string;
 }
 
+/**
+ * Storage key includes a version AND the current stanza count so persisted
+ * indices auto-invalidate when content changes (e.g. lyrics edited and stanzas
+ * shift). Stale entries from older versions are ignored and overwritten lazily.
+ */
+const STANZA_KEY_VERSION = "v2";
+function stanzaStorageKey(songId: string, stanzaCount: number): string {
+  return `sbc-active-stanza-${STANZA_KEY_VERSION}:${songId}:${stanzaCount}`;
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
 export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = "" }: Props) {
   const { isFavorite, toggle } = useFavorites();
   const tokens = useMemo(() => tokenizeQuery(query), [query]);
   const [activeStanza, setActiveStanza] = useState<number | null>(null);
+  // Used to announce the active stanza to assistive tech.
+  const [announcement, setAnnouncement] = useState("");
+
+  // Lyric stanza count drives keyboard navigation bounds + the versioned key.
+  const lyricStanzaCount = useMemo(
+    () => (song?.lyrics ? song.lyrics.split(/\n\s*\n/).length : 0),
+    [song?.lyrics],
+  );
 
   // Restore the previously locked stanza for this song from localStorage.
+  // Safe fallback: if the stored index is out of range for the current
+  // stanza count (content changed), discard it instead of throwing.
   useEffect(() => {
-    if (!song?.id) {
+    if (!song?.id || lyricStanzaCount === 0) {
       setActiveStanza(null);
       return;
     }
     try {
-      const raw = window.localStorage.getItem(`sbc-active-stanza-v1:${song.id}`);
-      const n = raw === null ? null : Number(raw);
-      setActiveStanza(Number.isFinite(n) && n !== null && (n as number) >= 0 ? (n as number) : null);
+      const key = stanzaStorageKey(song.id, lyricStanzaCount);
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) {
+        setActiveStanza(null);
+        return;
+      }
+      const n = Number(raw);
+      if (Number.isInteger(n) && n >= 0 && n < lyricStanzaCount) {
+        setActiveStanza(n);
+      } else {
+        // Stale / out-of-range — drop it silently.
+        window.localStorage.removeItem(key);
+        setActiveStanza(null);
+      }
     } catch {
       setActiveStanza(null);
     }
-  }, [song?.id]);
+  }, [song?.id, lyricStanzaCount]);
 
   // Persist whenever the user locks/clears a stanza.
   useEffect(() => {
-    if (!song?.id) return;
+    if (!song?.id || lyricStanzaCount === 0) return;
     try {
-      const key = `sbc-active-stanza-v1:${song.id}`;
+      const key = stanzaStorageKey(song.id, lyricStanzaCount);
       if (activeStanza === null) window.localStorage.removeItem(key);
       else window.localStorage.setItem(key, String(activeStanza));
     } catch {
       /* ignore */
     }
-  }, [song?.id, activeStanza]);
+  }, [song?.id, activeStanza, lyricStanzaCount]);
 
-  // Lyric stanza count drives keyboard navigation bounds.
-  const lyricStanzaCount = useMemo(
-    () => (song?.lyrics ? song.lyrics.split(/\n\s*\n/).length : 0),
-    [song?.lyrics],
-  );
+  // Announce stanza changes for screen readers.
+  useEffect(() => {
+    if (activeStanza === null) {
+      setAnnouncement("");
+    } else if (lyricStanzaCount > 0) {
+      setAnnouncement(
+        `Stanza ${activeStanza + 1} of ${lyricStanzaCount} locked`,
+      );
+    }
+  }, [activeStanza, lyricStanzaCount]);
 
   // Arrow-key navigation between stanzas while the sheet is open.
   useEffect(() => {
@@ -87,6 +133,23 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
         side="right"
         className="w-full sm:max-w-2xl overflow-y-auto bg-card p-0"
       >
+        {/* Accessible name + description for the dialog (visually hidden — visible header is below). */}
+        <VisuallyHidden.Root>
+          <SheetTitle>{song?.title ?? "Song details"}</SheetTitle>
+          <SheetDescription>
+            {song?.description || "Lyrics, pinyin, score and video for the selected worship song."}
+          </SheetDescription>
+        </VisuallyHidden.Root>
+        {/* Polite live region for stanza-lock announcements (screen readers). */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+          data-testid="stanza-announcer"
+        >
+          {announcement}
+        </div>
         {song && (
           <div className="flex flex-col">
             {/* Header */}
@@ -188,6 +251,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                     tokens={tokens}
                     active={activeStanza}
                     onSelect={setActiveStanza}
+                  ariaLabelPrefix="Lyrics stanza"
                     className="lyric-text font-cn text-foreground"
                   />
                 </section>
@@ -202,6 +266,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                     tokens={tokens}
                     active={activeStanza}
                     onSelect={setActiveStanza}
+                  ariaLabelPrefix="Pinyin stanza"
                     className="text-[15px] leading-loose text-muted-foreground"
                   />
                 </section>
@@ -257,29 +322,59 @@ function Stanzas({
   tokens,
   active,
   onSelect,
+  ariaLabelPrefix = "Stanza",
   className = "",
 }: {
   text: string;
   tokens: string[];
   active: number | null;
   onSelect: (i: number | null) => void;
+  ariaLabelPrefix?: string;
   className?: string;
 }) {
   const stanzas = useMemo(() => text.split(/\n\s*\n/), [text]);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  // Scroll active stanza into view (smooth) whenever it changes.
+  // Scroll active stanza into view whenever it changes. Honors
+  // prefers-reduced-motion and waits a frame so the sheet's open animation
+  // doesn't fight the scroll (esp. on mobile / touch).
   useEffect(() => {
     if (active === null) return;
     const el = refs.current[active];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!el) return;
+    const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
+    const hasRaf = typeof requestAnimationFrame !== "undefined";
+    const rafId = hasRaf
+      ? requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior, block: "center", inline: "nearest" });
+        })
+      : null;
+    const timeoutId = !hasRaf
+      ? setTimeout(() => {
+          el.scrollIntoView({ behavior, block: "center", inline: "nearest" });
+        }, 16)
+      : null;
+    return () => {
+      if (rafId !== null && typeof cancelAnimationFrame !== "undefined") {
+        cancelAnimationFrame(rafId);
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
   }, [active]);
 
+  const handleSelect = useCallback(
+    (i: number, isActive: boolean) => {
+      onSelect(isActive ? null : i);
+    },
+    [onSelect],
+  );
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" role="list">
       {stanzas.map((stanza, i) => {
         const isActive = active === i;
         const dimmed = active !== null && !isActive;
+        const label = `${ariaLabelPrefix} ${i + 1} of ${stanzas.length}${isActive ? ", locked" : ""}`;
         return (
           <button
             key={i}
@@ -287,10 +382,16 @@ function Stanzas({
               refs.current[i] = el;
             }}
             type="button"
-            onClick={() => onSelect(isActive ? null : i)}
+            onClick={() => handleSelect(i, isActive)}
             aria-pressed={isActive}
+            aria-label={label}
+            role="listitem"
+            data-stanza-index={i}
+            data-active={isActive ? "true" : "false"}
+            style={{ touchAction: "manipulation" }}
             className={
               "block w-full text-left rounded-md px-4 py-3 -mx-4 scroll-mt-32 transition-all " +
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card " +
               (isActive
                 ? "bg-accent/10 ring-1 ring-accent/40 "
                 : "hover:bg-secondary/50 ") +
