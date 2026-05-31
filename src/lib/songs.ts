@@ -13,6 +13,7 @@ export type Song = {
   pinyin: string;
   score_url: string;
   video_url: string;
+  tags: string[];
   created_at: string;
   updated_at: string;
 };
@@ -100,7 +101,7 @@ export function matchesSong(song: Song, query: string): boolean {
   const tokens = tokenizeQuery(query);
   if (tokens.length === 0) return true;
   const haystack = normalize(
-    `${song.title} ${song.description} ${song.lyrics} ${song.pinyin}`,
+    `${song.title} ${song.description} ${song.lyrics} ${song.pinyin} ${(song.tags ?? []).join(" ")}`,
   );
   // Every token must appear somewhere — supports partial pinyin like "ye su ai".
   return tokens.every((t) => haystack.includes(t));
