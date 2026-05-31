@@ -79,7 +79,8 @@ describe("TagFilterBar — keyboard navigation", () => {
 
   it("Escape clears all selections when any are active", async () => {
     const { onClear } = setup(["praise"]);
-    const chip = screen.getAllByRole("button")[0];
+    const toolbar = screen.getByRole("toolbar", { name: /tags/i });
+    const chip = within(toolbar).getAllByRole("button")[0];
     chip.focus();
     fireEvent.keyDown(chip, { key: "Escape", code: "Escape", bubbles: true });
     expect(onClear).toHaveBeenCalled();
@@ -98,7 +99,8 @@ describe("TagFilterBar — screen-reader announcements", () => {
   it("announces when filters are cleared", async () => {
     setup(["praise", "communion"]);
     const announcer = screen.getByTestId("tag-filter-announcer");
-    const chip = screen.getAllByRole("button")[0];
+    const toolbar = screen.getByRole("toolbar", { name: /tags/i });
+    const chip = within(toolbar).getAllByRole("button")[0];
     chip.focus();
     fireEvent.keyDown(chip, { key: "Escape", code: "Escape", bubbles: true });
     expect(announcer).toHaveTextContent(/cleared/i);
