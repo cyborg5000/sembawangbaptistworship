@@ -256,6 +256,7 @@ function Index() {
         song={activeSong}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        query={query}
         onEdit={(s) => {
           setEditing(s);
           setFormOpen(true);
