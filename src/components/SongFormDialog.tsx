@@ -27,6 +27,7 @@ const empty: SongInput = {
   pinyin: "",
   score_url: "",
   video_url: "",
+  tags: [],
 };
 
 export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props) {
@@ -44,6 +45,7 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props)
               pinyin: initial.pinyin,
               score_url: initial.score_url,
               video_url: initial.video_url,
+              tags: initial.tags ?? [],
             }
           : empty,
       );
@@ -91,6 +93,24 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props)
               onChange={(e) => update("description", e.target.value)}
               placeholder="Hymn · Key of G"
             />
+          </Field>
+          <Field label="Tags 标签">
+            <Input
+              value={form.tags.join(", ")}
+              onChange={(e) =>
+                update(
+                  "tags",
+                  e.target.value
+                    .split(",")
+                    .map((t) => t.trim())
+                    .filter(Boolean),
+                )
+              }
+              placeholder="christmas, communion, praise"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Comma-separated. Tags are searchable from the main search bar.
+            </p>
           </Field>
           <Field label="Lyrics 歌词">
             <Textarea
