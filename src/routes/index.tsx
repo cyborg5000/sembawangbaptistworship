@@ -1,7 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, Music, Search, Sparkles } from "lucide-react";
+import {
+  Heart,
+  Music,
+  Search,
+  Sparkles,
+  FileText,
+  Languages,
+  Video,
+  FileMusic,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   fetchSongs,
@@ -45,6 +54,10 @@ function Index() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [view, setView] = useState<"all" | "favorites">("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  // Content filters: only show songs that HAVE the chosen resource(s).
+  const [needs, setNeeds] = useState<string[]>([]);
+  const toggleNeed = (n: string) =>
+    setNeeds((cur) => (cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]));
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -83,9 +96,15 @@ function Index() {
       list = list.filter((s) =>
         selectedTags.every((t) => (s.tags ?? []).includes(t)),
       );
+    // Content filters (AND): keep only songs that have the chosen resources.
+    if (needs.includes("lyrics")) list = list.filter((s) => s.lyrics?.trim());
+    if (needs.includes("english"))
+      list = list.filter((s) => s.lyrics_en?.trim() || s.title_en?.trim());
+    if (needs.includes("score")) list = list.filter((s) => s.score_url?.trim());
+    if (needs.includes("video")) list = list.filter((s) => s.video_url?.trim());
     if (view === "favorites") list = list.filter((s) => favorites.includes(s.id));
     return list;
-  }, [fuse, allSongs, debouncedQuery, selectedTags, view, favorites]);
+  }, [fuse, allSongs, debouncedQuery, selectedTags, needs, view, favorites]);
 
   const openSong = (s: Song) => {
     setActiveSong(s);
@@ -157,6 +176,22 @@ function Index() {
           </FilterChip>
         </div>
 
+        {/* Content filters: show only songs that have a score / video / lyrics / English */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <NeedChip active={needs.includes("score")} onClick={() => toggleNeed("score")}>
+            <FileMusic className="h-3.5 w-3.5" /> Score 谱
+          </NeedChip>
+          <NeedChip active={needs.includes("video")} onClick={() => toggleNeed("video")}>
+            <Video className="h-3.5 w-3.5" /> Video 视频
+          </NeedChip>
+          <NeedChip active={needs.includes("lyrics")} onClick={() => toggleNeed("lyrics")}>
+            <FileText className="h-3.5 w-3.5" /> Lyrics 词
+          </NeedChip>
+          <NeedChip active={needs.includes("english")} onClick={() => toggleNeed("english")}>
+            <Languages className="h-3.5 w-3.5" /> English
+          </NeedChip>
+        </div>
+
         {allTags.length > 0 && (
           <TagFilterBar
             tags={allTags}
@@ -203,12 +238,15 @@ function Index() {
                     {(filtered.indexOf(s) + 1).toString().padStart(2, "0")}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="font-serif-display text-xl sm:text-2xl text-foreground truncate font-medium">
-                      {s.title}
-                    </p>
-                    {(s.description || s.pinyin) && (
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <p className="font-serif-display text-xl sm:text-2xl text-foreground truncate font-medium">
+                        {s.title}
+                      </p>
+                      <SongBadges song={s} />
+                    </div>
+                    {(s.description || s.title_en) && (
                       <p className="text-sm text-muted-foreground truncate mt-0.5">
-                        {s.description || s.pinyin.split("\n")[0]}
+                        {s.description || s.title_en}
                       </p>
                     )}
                     {s.tags && s.tags.length > 0 && (
@@ -263,6 +301,47 @@ function Index() {
         query={query}
       />
     </div>
+  );
+}
+
+/** At-a-glance icons showing which resources a song has. */
+function SongBadges({ song }: { song: Song }) {
+  const hasLyrics = !!song.lyrics?.trim();
+  const hasEnglish = !!(song.lyrics_en?.trim() || song.title_en?.trim());
+  const hasScore = !!song.score_url?.trim();
+  const hasVideo = !!song.video_url?.trim();
+  return (
+    <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground/70">
+      {hasLyrics && <FileText className="h-3.5 w-3.5" aria-label="Has lyrics" />}
+      {hasEnglish && <Languages className="h-3.5 w-3.5" aria-label="Has English version" />}
+      {hasScore && <FileMusic className="h-3.5 w-3.5 text-accent/80" aria-label="Has score" />}
+      {hasVideo && <Video className="h-3.5 w-3.5 text-accent/80" aria-label="Has video" />}
+    </div>
+  );
+}
+
+/** Toggle chip for the content filters (score / video / lyrics / English). */
+function NeedChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors border " +
+        (active
+          ? "bg-accent/10 border-accent/40 text-foreground"
+          : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary")
+      }
+    >
+      {children}
+    </button>
   );
 }
 
