@@ -335,15 +335,22 @@ function Stanzas({
     const el = refs.current[active];
     if (!el) return;
     const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
-    const raf =
-      typeof requestAnimationFrame !== "undefined"
-        ? requestAnimationFrame
-        : (cb: FrameRequestCallback) => setTimeout(() => cb(0), 16);
-    const id = raf(() => {
-      el.scrollIntoView({ behavior, block: "center", inline: "nearest" });
-    });
+    const hasRaf = typeof requestAnimationFrame !== "undefined";
+    const rafId = hasRaf
+      ? requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior, block: "center", inline: "nearest" });
+        })
+      : null;
+    const timeoutId = !hasRaf
+      ? setTimeout(() => {
+          el.scrollIntoView({ behavior, block: "center", inline: "nearest" });
+        }, 16)
+      : null;
     return () => {
-      if (typeof cancelAnimationFrame !== "undefined") cancelAnimationFrame(id);
+      if (rafId !== null && typeof cancelAnimationFrame !== "undefined") {
+        cancelAnimationFrame(rafId);
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId);
     };
   }, [active]);
 
