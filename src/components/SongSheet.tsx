@@ -1,7 +1,8 @@
+import { useMemo, useState, useEffect } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
-import { type Song, youtubeEmbed } from "@/lib/songs";
+import { type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
 import { useFavorites } from "@/hooks/use-favorites";
 
 interface Props {
@@ -10,10 +11,18 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   onEdit: (song: Song) => void;
   onDelete: (song: Song) => void;
+  query?: string;
 }
 
-export function SongSheet({ song, open, onOpenChange, onEdit, onDelete }: Props) {
+export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = "" }: Props) {
   const { isFavorite, toggle } = useFavorites();
+  const tokens = useMemo(() => tokenizeQuery(query), [query]);
+  const [activeStanza, setActiveStanza] = useState<number | null>(null);
+
+  // Reset active stanza whenever the song changes.
+  useEffect(() => {
+    setActiveStanza(null);
+  }, [song?.id]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -117,9 +126,13 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete }: Props)
               {song.lyrics && (
                 <section>
                   <SectionLabel>Lyrics · 歌词</SectionLabel>
-                  <pre className="lyric-text whitespace-pre-wrap font-cn text-foreground">
-                    {song.lyrics}
-                  </pre>
+                  <Stanzas
+                    text={song.lyrics}
+                    tokens={tokens}
+                    active={activeStanza}
+                    onSelect={setActiveStanza}
+                    className="lyric-text font-cn text-foreground"
+                  />
                 </section>
               )}
 
@@ -127,9 +140,13 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete }: Props)
               {song.pinyin && (
                 <section>
                   <SectionLabel>Hanyu Pinyin</SectionLabel>
-                  <pre className="whitespace-pre-wrap text-[15px] leading-loose text-muted-foreground">
-                    {song.pinyin}
-                  </pre>
+                  <Stanzas
+                    text={song.pinyin}
+                    tokens={tokens}
+                    active={activeStanza}
+                    onSelect={setActiveStanza}
+                    className="text-[15px] leading-loose text-muted-foreground"
+                  />
                 </section>
               )}
 
@@ -174,5 +191,87 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
       </span>
       <span className="h-px flex-1 bg-border" />
     </div>
+  );
+}
+
+/** Render text split into stanzas (separated by blank lines). Click to focus. */
+function Stanzas({
+  text,
+  tokens,
+  active,
+  onSelect,
+  className = "",
+}: {
+  text: string;
+  tokens: string[];
+  active: number | null;
+  onSelect: (i: number | null) => void;
+  className?: string;
+}) {
+  const stanzas = useMemo(() => text.split(/\n\s*\n/), [text]);
+  return (
+    <div className="space-y-5">
+      {stanzas.map((stanza, i) => {
+        const isActive = active === i;
+        const dimmed = active !== null && !isActive;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onSelect(isActive ? null : i)}
+            className={
+              "block w-full text-left rounded-md px-4 py-3 -mx-4 transition-all " +
+              (isActive
+                ? "bg-accent/10 ring-1 ring-accent/40 "
+                : "hover:bg-secondary/50 ") +
+              (dimmed ? "opacity-40 " : "")
+            }
+          >
+            <pre className={"whitespace-pre-wrap m-0 " + className}>
+              <Highlight text={stanza} tokens={tokens} />
+            </pre>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Wrap occurrences of any token (case-insensitive, diacritic-insensitive) in <mark>. */
+function Highlight({ text, tokens }: { text: string; tokens: string[] }) {
+  if (!tokens.length || !text) return <>{text}</>;
+  // Strip diacritics from text for matching, but render original chars.
+  const folded = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // Folded string preserves character count because we only remove combining marks.
+  const pattern = new RegExp(
+    "(" + tokens.map(escapeRegExp).join("|") + ")",
+    "gi",
+  );
+  const parts: Array<{ start: number; end: number; match: boolean }> = [];
+  let last = 0;
+  for (const m of folded.matchAll(pattern)) {
+    const start = m.index ?? 0;
+    const end = start + m[0].length;
+    if (start > last) parts.push({ start: last, end: start, match: false });
+    parts.push({ start, end, match: true });
+    last = end;
+  }
+  if (last < text.length) parts.push({ start: last, end: text.length, match: false });
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.match ? (
+          <mark key={i} className="bg-accent/25 text-foreground rounded-sm px-0.5">
+            {text.slice(p.start, p.end)}
+          </mark>
+        ) : (
+          <span key={i}>{text.slice(p.start, p.end)}</span>
+        ),
+      )}
+    </>
   );
 }
