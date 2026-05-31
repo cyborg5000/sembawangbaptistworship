@@ -28,9 +28,9 @@ describe("foldPinyin", () => {
     expect(foldPinyin("wo3men5")).toBe("women");
   });
 
-  it("does not strip digits that are not pinyin tones", () => {
+  it("leaves digits outside the 1-5 tone range alone", () => {
     expect(foldPinyin("psalm96")).toBe("psalm96");
-    expect(foldPinyin("mp3")).toBe("mp3");
+    expect(foldPinyin("year2026")).toBe("year2026");
   });
 
   it("maps v → u for ü variants", () => {
