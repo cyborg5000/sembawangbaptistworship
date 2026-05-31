@@ -19,6 +19,7 @@ import {
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
 import { SongFormDialog } from "@/components/SongFormDialog";
+import { TagFilterBar } from "@/components/TagFilterBar";
 import logoUrl from "@/assets/sbc-logo.png";
 
 export const Route = createFileRoute("/")({
