@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TagFilterBar } from "./TagFilterBar";
 
@@ -78,10 +78,10 @@ describe("TagFilterBar — keyboard navigation", () => {
   });
 
   it("Escape clears all selections when any are active", async () => {
-    const user = userEvent.setup();
     const { onClear } = setup(["praise"]);
-    screen.getAllByRole("button")[0].focus();
-    await user.keyboard("{Escape}");
+    const chip = screen.getAllByRole("button")[0];
+    chip.focus();
+    fireEvent.keyDown(chip, { key: "Escape" });
     expect(onClear).toHaveBeenCalled();
   });
 });
@@ -96,11 +96,11 @@ describe("TagFilterBar — screen-reader announcements", () => {
   });
 
   it("announces when filters are cleared", async () => {
-    const user = userEvent.setup();
     setup(["praise", "communion"]);
     const announcer = screen.getByTestId("tag-filter-announcer");
-    screen.getAllByRole("button")[0].focus();
-    await user.keyboard("{Escape}");
+    const chip = screen.getAllByRole("button")[0];
+    chip.focus();
+    fireEvent.keyDown(chip, { key: "Escape" });
     expect(announcer).toHaveTextContent(/cleared/i);
   });
 });
