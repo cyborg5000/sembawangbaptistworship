@@ -54,21 +54,28 @@ export async function deleteSong(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Normalize for matching: lowercase, strip diacritics & punctuation/spaces */
+/** Fold pinyin: strip tone-number suffixes (ni3 → ni) and map v → u (lv → lu). */
+function foldPinyin(s: string): string {
+  // Drop tone digits 1-5 that follow a latin letter run: "ni3hao3" → "nihao".
+  return s.replace(/([a-z])([1-5])(?=$|[^a-z0-9]|[a-z])/g, "$1").replace(/v/g, "u");
+}
+
+/** Normalize for matching: lowercase, strip diacritics, fold pinyin, drop punctuation/spaces */
 function normalize(s: string): string {
-  return s
+  const base = s
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
+    .replace(/[\u0300-\u036f]/g, "");
+  return foldPinyin(base).replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
 }
 
 /** Normalize but keep spaces as token separators (for partial-token matching). */
 function normalizeKeepSpaces(s: string): string {
-  return s
+  const base = s
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "");
+  return foldPinyin(base)
     .replace(/[^a-z0-9\u4e00-\u9fff\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
