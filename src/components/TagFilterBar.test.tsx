@@ -78,10 +78,10 @@ describe("TagFilterBar — keyboard navigation", () => {
   });
 
   it("Escape clears all selections when any are active", async () => {
+    const user = userEvent.setup();
     const { onClear } = setup(["praise"]);
-    const chip = screen.getAllByRole("button")[0];
-    chip.focus();
-    fireEvent.keyDown(chip, { key: "Escape" });
+    await user.tab();
+    await user.keyboard("{Escape}");
     expect(onClear).toHaveBeenCalled();
   });
 });
@@ -96,11 +96,11 @@ describe("TagFilterBar — screen-reader announcements", () => {
   });
 
   it("announces when filters are cleared", async () => {
+    const user = userEvent.setup();
     setup(["praise", "communion"]);
     const announcer = screen.getByTestId("tag-filter-announcer");
-    const chip = screen.getAllByRole("button")[0];
-    chip.focus();
-    fireEvent.keyDown(chip, { key: "Escape" });
+    await user.tab();
+    await user.keyboard("{Escape}");
     expect(announcer).toHaveTextContent(/cleared/i);
   });
 });
