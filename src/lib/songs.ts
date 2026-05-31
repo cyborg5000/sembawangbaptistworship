@@ -55,13 +55,13 @@ export async function deleteSong(id: string): Promise<void> {
 }
 
 /** Fold pinyin: strip tone-number suffixes (ni3 → ni) and map v → u (lv → lu). */
-function foldPinyin(s: string): string {
+export function foldPinyin(s: string): string {
   // Drop tone digits 1-5 that follow a latin letter run: "ni3hao3" → "nihao".
   return s.replace(/([a-z])([1-5])(?=$|[^a-z0-9]|[a-z])/g, "$1").replace(/v/g, "u");
 }
 
 /** Normalize for matching: lowercase, strip diacritics, fold pinyin, drop punctuation/spaces */
-function normalize(s: string): string {
+export function normalize(s: string): string {
   const base = s
     .toLowerCase()
     .normalize("NFD")
@@ -70,7 +70,7 @@ function normalize(s: string): string {
 }
 
 /** Normalize but keep spaces as token separators (for partial-token matching). */
-function normalizeKeepSpaces(s: string): string {
+export function normalizeKeepSpaces(s: string): string {
   const base = s
     .toLowerCase()
     .normalize("NFD")

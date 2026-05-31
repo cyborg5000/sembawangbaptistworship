@@ -17,6 +17,7 @@ import {
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
 import { SongFormDialog } from "@/components/SongFormDialog";
+import logoUrl from "@/assets/sbc-logo.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -113,9 +114,11 @@ function Index() {
       <header className="border-b border-border">
         <div className="mx-auto max-w-5xl px-6 py-8 flex items-center justify-between gap-6">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="flex h-12 w-12 items-center justify-center rounded-sm border border-foreground/80 font-cn text-foreground text-xl font-bold shrink-0">
-              森
-            </div>
+            <img
+              src={logoUrl}
+              alt="Sembawang Baptist Church"
+              className="h-12 w-12 object-contain shrink-0"
+            />
             <div className="min-w-0">
               <p className="font-cn text-foreground text-base leading-tight truncate">
                 森峇旺浸信教会

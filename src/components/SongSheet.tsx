@@ -19,10 +19,32 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
   const tokens = useMemo(() => tokenizeQuery(query), [query]);
   const [activeStanza, setActiveStanza] = useState<number | null>(null);
 
-  // Reset active stanza whenever the song changes.
+  // Restore the previously locked stanza for this song from localStorage.
   useEffect(() => {
-    setActiveStanza(null);
+    if (!song?.id) {
+      setActiveStanza(null);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(`sbc-active-stanza-v1:${song.id}`);
+      const n = raw === null ? null : Number(raw);
+      setActiveStanza(Number.isFinite(n) && n !== null && (n as number) >= 0 ? (n as number) : null);
+    } catch {
+      setActiveStanza(null);
+    }
   }, [song?.id]);
+
+  // Persist whenever the user locks/clears a stanza.
+  useEffect(() => {
+    if (!song?.id) return;
+    try {
+      const key = `sbc-active-stanza-v1:${song.id}`;
+      if (activeStanza === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, String(activeStanza));
+    } catch {
+      /* ignore */
+    }
+  }, [song?.id, activeStanza]);
 
   // Lyric stanza count drives keyboard navigation bounds.
   const lyricStanzaCount = useMemo(
@@ -37,13 +59,19 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.key === "ArrowDown" || e.key === "j") {
-        e.preventDefault();
-        setActiveStanza((cur) =>
-          cur === null ? 0 : Math.min(lyricStanzaCount - 1, cur + 1),
-        );
+        setActiveStanza((cur) => {
+          const next = cur === null ? 0 : Math.min(lyricStanzaCount - 1, cur + 1);
+          // Only swallow the keystroke when navigation actually moves —
+          // otherwise let the page scroll naturally instead of trapping at the end.
+          if (next !== cur) e.preventDefault();
+          return next;
+        });
       } else if (e.key === "ArrowUp" || e.key === "k") {
-        e.preventDefault();
-        setActiveStanza((cur) => (cur === null ? 0 : Math.max(0, cur - 1)));
+        setActiveStanza((cur) => {
+          const next = cur === null ? 0 : Math.max(0, cur - 1);
+          if (next !== cur) e.preventDefault();
+          return next;
+        });
       } else if (e.key === "Escape" && activeStanza !== null) {
         e.preventDefault();
         setActiveStanza(null);
