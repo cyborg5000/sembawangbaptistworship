@@ -39,12 +39,22 @@ export function normalizeTags(tags: readonly string[] | null | undefined): strin
 }
 
 export async function fetchSongs(): Promise<Song[]> {
-  const { data, error } = await db
-    .from("songs")
-    .select("*")
-    .order("title", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as Song[];
+  // PostgREST caps each response at ~1000 rows. Page through with .range()
+  // until a short batch comes back, so the whole library always loads.
+  const PAGE = 1000;
+  const all: Song[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .from("songs")
+      .select("*")
+      .order("title", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as Song[];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return all;
 }
 
 /** Escape PostgREST ILIKE pattern wildcards in a user-supplied query. */

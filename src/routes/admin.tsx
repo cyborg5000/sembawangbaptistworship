@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -33,6 +33,7 @@ import {
 } from "@/lib/songs";
 import { buildSongIndex, searchRanked } from "@/lib/search";
 import { SongFormDialog } from "@/components/SongFormDialog";
+import { Pager } from "@/components/Pager";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/admin")({
@@ -159,6 +160,15 @@ function AdminDashboard() {
     [query, fuse, songs],
   );
 
+  // Pagination — 20 songs per page.
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+  const pageCount = Math.ceil(rows.length / PAGE_SIZE);
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const createMut = useMutation({
     mutationFn: (input: SongInput) => createSong(input),
     onSuccess: () => {
@@ -251,10 +261,10 @@ function AdminDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((s, i) => (
+              {pageRows.map((s, i) => (
                 <TableRow key={s.id}>
                   <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {i + 1}
+                    {(page - 1) * PAGE_SIZE + i + 1}
                   </TableCell>
                   <TableCell className="font-cn font-medium text-foreground">
                     {s.title}
@@ -328,6 +338,7 @@ function AdminDashboard() {
             </TableBody>
           </Table>
         </div>
+        <Pager page={page} pageCount={pageCount} onPage={setPage} total={rows.length} />
       </div>
 
       <SongFormDialog

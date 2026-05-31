@@ -41,14 +41,13 @@ describe("SongSheet stanza interaction", () => {
     window.localStorage.clear();
   });
 
-  it("renders ARIA-labeled stanza buttons for both lyrics and pinyin", () => {
+  it("renders ARIA-labeled lyric stanza buttons + a pinyin toggle", () => {
     setup();
     expect(
       screen.getByLabelText(/Lyrics stanza 1 of 3/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/Pinyin stanza 2 of 2/i),
-    ).toBeInTheDocument();
+    // Pinyin is now an interlinear toggle rather than a separate section.
+    expect(screen.getByText(/拼音 Pinyin/i)).toBeInTheDocument();
   });
 
   it("locks a stanza on click, centers it via scrollIntoView, and updates aria-pressed", async () => {

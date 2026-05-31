@@ -21,6 +21,7 @@ import { buildSongIndex, searchRanked } from "@/lib/search";
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
 import { TagFilterBar } from "@/components/TagFilterBar";
+import { Pager } from "@/components/Pager";
 import logoUrl from "@/assets/sbc-logo.png";
 
 export const Route = createFileRoute("/")({
@@ -105,6 +106,15 @@ function Index() {
     if (view === "favorites") list = list.filter((s) => favorites.includes(s.id));
     return list;
   }, [fuse, allSongs, debouncedQuery, selectedTags, needs, view, favorites]);
+
+  // Pagination — public list pages at 100/page; only shows when it overflows.
+  const PAGE_SIZE = 100;
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, selectedTags, needs, view]);
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openSong = (s: Song) => {
     setActiveSong(s);
@@ -228,14 +238,14 @@ function Index() {
           )
         ) : (
           <ul className="divide-y divide-border border-y border-border">
-            {filtered.map((s) => (
+            {visible.map((s, i) => (
               <li key={s.id}>
                 <button
                   onClick={() => openSong(s)}
                   className="group w-full text-left px-2 sm:px-4 py-5 flex items-center gap-5 hover:bg-secondary/60 transition-colors"
                 >
                   <span className="font-serif-display text-2xl sm:text-3xl text-muted-foreground/60 group-hover:text-accent transition-colors w-10 tabular-nums shrink-0">
-                    {(filtered.indexOf(s) + 1).toString().padStart(2, "0")}
+                    {((page - 1) * PAGE_SIZE + i + 1).toString().padStart(2, "0")}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -285,6 +295,7 @@ function Index() {
             ))}
           </ul>
         )}
+        <Pager page={page} pageCount={pageCount} onPage={setPage} total={filtered.length} />
       </section>
 
       <footer className="border-t border-border">
