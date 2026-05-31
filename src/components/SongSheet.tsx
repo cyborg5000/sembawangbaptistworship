@@ -4,7 +4,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
-import { songPinyin } from "@/lib/pinyin";
+import { songPinyin, linePinyin } from "@/lib/pinyin";
 import { useFavorites } from "@/hooks/use-favorites";
 
 interface Props {
@@ -42,9 +42,12 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
   // Used to announce the active stanza to assistive tech.
   const [announcement, setAnnouncement] = useState("");
 
-  // Language tab: 中文 (zh) vs English (en) version of the song's lyrics/title.
+  // Language tab: 中文 (zh) vs English (en). Only offer English when there are
+  // real English LYRICS (not just an English title) — avoids an empty English tab.
   const [lang, setLang] = useState<"zh" | "en">("zh");
-  const hasEnglish = Boolean(song?.lyrics_en?.trim() || song?.title_en?.trim());
+  const hasEnglish = Boolean(song?.lyrics_en?.trim());
+  // Pinyin toggle (off by default) — shows hanyu pinyin under each Chinese line.
+  const [showPinyin, setShowPinyin] = useState(false);
   // Reset to Chinese whenever a different song opens.
   useEffect(() => {
     setLang("zh");
@@ -303,38 +306,44 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                   );
                 })()}
 
-              {/* Lyrics — Chinese or English depending on the active language tab */}
+              {/* Lyrics — Chinese (with optional interlinear pinyin) or English */}
               {activeLyrics && (
                 <section>
-                  <SectionLabel>
-                    {lang === "en" ? "Lyrics · English" : "Lyrics · 歌词"}
-                  </SectionLabel>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      {lang === "en" ? "Lyrics · English" : "Lyrics · 歌词"}
+                    </span>
+                    <span className="flex items-center gap-3">
+                      {lang === "zh" && pinyinText && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPinyin((v) => !v)}
+                          aria-pressed={showPinyin}
+                          className={
+                            "rounded-full border px-3 py-1 text-[11px] uppercase tracking-wider transition-colors " +
+                            (showPinyin
+                              ? "bg-accent/10 border-accent/40 text-foreground"
+                              : "border-border text-muted-foreground hover:text-foreground")
+                          }
+                        >
+                          拼音 Pinyin
+                        </button>
+                      )}
+                      <span className="h-px flex-1 bg-border w-8" />
+                    </span>
+                  </div>
                   <Stanzas
                     text={activeLyrics}
                     tokens={tokens}
                     active={activeStanza}
                     onSelect={setActiveStanza}
-                  ariaLabelPrefix="Lyrics stanza"
+                    ariaLabelPrefix="Lyrics stanza"
+                    interlinearPinyin={lang === "zh" && showPinyin}
                     className={
                       lang === "en"
                         ? "lyric-text text-foreground"
                         : "lyric-text font-cn text-foreground"
                     }
-                  />
-                </section>
-              )}
-
-              {/* Pinyin — generated on the fly, only for the Chinese version */}
-              {lang === "zh" && pinyinText && (
-                <section>
-                  <SectionLabel>Hanyu Pinyin</SectionLabel>
-                  <Stanzas
-                    text={pinyinText}
-                    tokens={tokens}
-                    active={activeStanza}
-                    onSelect={setActiveStanza}
-                  ariaLabelPrefix="Pinyin stanza"
-                    className="text-[15px] leading-loose text-muted-foreground"
                   />
                 </section>
               )}
@@ -429,6 +438,7 @@ function Stanzas({
   onSelect,
   ariaLabelPrefix = "Stanza",
   className = "",
+  interlinearPinyin = false,
 }: {
   text: string;
   tokens: string[];
@@ -436,6 +446,7 @@ function Stanzas({
   onSelect: (i: number | null) => void;
   ariaLabelPrefix?: string;
   className?: string;
+  interlinearPinyin?: boolean;
 }) {
   const stanzas = useMemo(() => text.split(/\n\s*\n/), [text]);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -503,9 +514,29 @@ function Stanzas({
               (dimmed ? "opacity-40 " : "")
             }
           >
-            <pre className={"whitespace-pre-wrap m-0 " + className}>
-              <Highlight text={stanza} tokens={tokens} />
-            </pre>
+            {interlinearPinyin ? (
+              <div className={className}>
+                {stanza.split("\n").map((line, li) => {
+                  const py = linePinyin(line);
+                  return (
+                    <div key={li} className="mb-2.5 last:mb-0">
+                      <div className="whitespace-pre-wrap">
+                        <Highlight text={line} tokens={tokens} />
+                      </div>
+                      {py && (
+                        <div className="text-[12px] leading-tight text-muted-foreground/70 font-sans mt-0.5">
+                          <Highlight text={py} tokens={tokens} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <pre className={"whitespace-pre-wrap m-0 " + className}>
+                <Highlight text={stanza} tokens={tokens} />
+              </pre>
+            )}
           </button>
         );
       })}

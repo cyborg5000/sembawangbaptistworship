@@ -43,3 +43,9 @@ export function songPinyin(song: {
 export function titlePinyin(title: string): string {
   return CJK.test(title) ? pinyin(title, { toneType: "none" }) : "";
 }
+
+/** Tone-marked pinyin for a single lyric line (for interlinear display). */
+export function linePinyin(line: string): string {
+  if (!line.trim() || !CJK.test(line)) return "";
+  return pinyin(line, { toneType: "symbol", nonZh: "consecutive" });
+}
