@@ -11,8 +11,8 @@ interface Props {
   song: Song | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit: (song: Song) => void;
-  onDelete: (song: Song) => void;
+  onEdit?: (song: Song) => void;
+  onDelete?: (song: Song) => void;
   query?: string;
 }
 
@@ -240,22 +240,26 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                       }
                     />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(song)}
-                    aria-label="Edit song"
-                  >
-                    <Pencil className="text-muted-foreground" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onDelete(song)}
-                    aria-label="Delete song"
-                  >
-                    <Trash2 className="text-muted-foreground" />
-                  </Button>
+                  {onEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onEdit(song)}
+                      aria-label="Edit song"
+                    >
+                      <Pencil className="text-muted-foreground" />
+                    </Button>
+                  )}
+                  {onDelete && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDelete(song)}
+                      aria-label="Delete song"
+                    >
+                      <Trash2 className="text-muted-foreground" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

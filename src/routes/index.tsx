@@ -1,23 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Heart, Music, Plus, Search, Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Heart, Music, Search, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import {
-  createSong,
-  deleteSong,
   fetchSongs,
   normalizeTags,
-  updateSong,
   type Song,
-  type SongInput,
 } from "@/lib/songs";
 import { buildSongIndex, searchRanked } from "@/lib/search";
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
-import { SongFormDialog } from "@/components/SongFormDialog";
 import { TagFilterBar } from "@/components/TagFilterBar";
 import logoUrl from "@/assets/sbc-logo.png";
 
@@ -41,7 +34,6 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const qc = useQueryClient();
   // Full library: drives the ranked search, tag filter bar + counts.
   const { data: allSongs = [], isLoading } = useQuery({
     queryKey: ["songs", "all"],
@@ -55,8 +47,6 @@ function Index() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Song | null>(null);
 
   // Debounce the typed query before searching.
   useEffect(() => {
@@ -97,52 +87,9 @@ function Index() {
     return list;
   }, [fuse, allSongs, debouncedQuery, selectedTags, view, favorites]);
 
-  const createMut = useMutation({
-    mutationFn: (input: SongInput) => createSong(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["songs"] });
-      toast.success("Song added");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: SongInput }) =>
-      updateSong(id, input),
-    onSuccess: (updated) => {
-      qc.invalidateQueries({ queryKey: ["songs"] });
-      setActiveSong(updated);
-      toast.success("Song updated");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteSong(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["songs"] });
-      setSheetOpen(false);
-      setActiveSong(null);
-      toast.success("Song removed");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const openSong = (s: Song) => {
     setActiveSong(s);
     setSheetOpen(true);
-  };
-
-  const handleSubmit = async (input: SongInput) => {
-    if (editing) {
-      await updateMut.mutateAsync({ id: editing.id, input });
-    } else {
-      await createMut.mutateAsync(input);
-    }
-  };
-
-  const handleDelete = (s: Song) => {
-    if (confirm(`Remove "${s.title}"?`)) deleteMut.mutate(s.id);
   };
 
   return (
@@ -165,16 +112,12 @@ function Index() {
               </p>
             </div>
           </div>
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-            className="gap-2"
+          <Link
+            to="/admin"
+            className="text-xs uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add song</span>
-          </Button>
+            Admin
+          </Link>
         </div>
       </header>
 
@@ -318,20 +261,6 @@ function Index() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         query={query}
-        onEdit={(s) => {
-          setEditing(s);
-          setFormOpen(true);
-        }}
-        onDelete={handleDelete}
-      />
-      <SongFormDialog
-        open={formOpen}
-        onOpenChange={(o) => {
-          setFormOpen(o);
-          if (!o) setEditing(null);
-        }}
-        initial={editing}
-        onSubmit={handleSubmit}
       />
     </div>
   );
