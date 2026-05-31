@@ -12,6 +12,7 @@ const song: Song = {
   pinyin: "qí yì ēn diǎn\n\njiù wǒ huí jiā",
   score_url: "",
   video_url: "",
+  tags: [],
   created_at: "",
   updated_at: "",
 };
