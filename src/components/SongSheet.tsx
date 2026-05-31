@@ -335,23 +335,33 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                 </section>
               )}
 
-              {/* Score */}
+              {/* Score — may be multiple pages (newline-separated URLs) */}
               {song.score_url && (
                 <section>
                   <SectionLabel>Score · 乐谱</SectionLabel>
-                  {song.score_url.match(/\.pdf($|\?)/i) ? (
-                    <iframe
-                      src={song.score_url}
-                      title="Score"
-                      className="h-[80vh] w-full rounded-md border border-border bg-white"
-                    />
-                  ) : (
-                    <img
-                      src={song.score_url}
-                      alt={`${song.title} score`}
-                      className="w-full rounded-md border border-border bg-white"
-                    />
-                  )}
+                  <div className="space-y-4">
+                    {song.score_url
+                      .split("\n")
+                      .map((u) => u.trim())
+                      .filter(Boolean)
+                      .map((url, i) =>
+                        url.match(/\.pdf($|\?)/i) ? (
+                          <iframe
+                            key={i}
+                            src={url}
+                            title={`Score page ${i + 1}`}
+                            className="h-[80vh] w-full rounded-md border border-border bg-white"
+                          />
+                        ) : (
+                          <img
+                            key={i}
+                            src={url}
+                            alt={`${song.title} score page ${i + 1}`}
+                            className="w-full rounded-md border border-border bg-white"
+                          />
+                        ),
+                      )}
+                  </div>
                 </section>
               )}
 
