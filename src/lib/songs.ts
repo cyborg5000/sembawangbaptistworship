@@ -1,5 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// Supabase types regenerate after migrations propagate; cast to keep
+// the build green meanwhile.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = supabase as any;
+
 export type Song = {
   id: string;
   title: string;
@@ -15,7 +20,7 @@ export type Song = {
 export type SongInput = Omit<Song, "id" | "created_at" | "updated_at">;
 
 export async function fetchSongs(): Promise<Song[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("songs")
     .select("*")
     .order("title", { ascending: true });
@@ -24,7 +29,7 @@ export async function fetchSongs(): Promise<Song[]> {
 }
 
 export async function createSong(input: SongInput): Promise<Song> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("songs")
     .insert(input)
     .select()
@@ -34,7 +39,7 @@ export async function createSong(input: SongInput): Promise<Song> {
 }
 
 export async function updateSong(id: string, input: Partial<SongInput>): Promise<Song> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("songs")
     .update({ ...input, updated_at: new Date().toISOString() })
     .eq("id", id)
@@ -45,7 +50,7 @@ export async function updateSong(id: string, input: Partial<SongInput>): Promise
 }
 
 export async function deleteSong(id: string): Promise<void> {
-  const { error } = await supabase.from("songs").delete().eq("id", id);
+  const { error } = await db.from("songs").delete().eq("id", id);
   if (error) throw error;
 }
 
