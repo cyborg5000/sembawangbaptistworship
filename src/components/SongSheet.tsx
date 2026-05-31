@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
@@ -23,6 +23,35 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
   useEffect(() => {
     setActiveStanza(null);
   }, [song?.id]);
+
+  // Lyric stanza count drives keyboard navigation bounds.
+  const lyricStanzaCount = useMemo(
+    () => (song?.lyrics ? song.lyrics.split(/\n\s*\n/).length : 0),
+    [song?.lyrics],
+  );
+
+  // Arrow-key navigation between stanzas while the sheet is open.
+  useEffect(() => {
+    if (!open || lyricStanzaCount === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        setActiveStanza((cur) =>
+          cur === null ? 0 : Math.min(lyricStanzaCount - 1, cur + 1),
+        );
+      } else if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        setActiveStanza((cur) => (cur === null ? 0 : Math.max(0, cur - 1)));
+      } else if (e.key === "Escape" && activeStanza !== null) {
+        e.preventDefault();
+        setActiveStanza(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, lyricStanzaCount, activeStanza]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -209,6 +238,15 @@ function Stanzas({
   className?: string;
 }) {
   const stanzas = useMemo(() => text.split(/\n\s*\n/), [text]);
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Scroll active stanza into view (smooth) whenever it changes.
+  useEffect(() => {
+    if (active === null) return;
+    const el = refs.current[active];
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [active]);
+
   return (
     <div className="space-y-5">
       {stanzas.map((stanza, i) => {
@@ -217,10 +255,14 @@ function Stanzas({
         return (
           <button
             key={i}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             type="button"
             onClick={() => onSelect(isActive ? null : i)}
+            aria-pressed={isActive}
             className={
-              "block w-full text-left rounded-md px-4 py-3 -mx-4 transition-all " +
+              "block w-full text-left rounded-md px-4 py-3 -mx-4 scroll-mt-32 transition-all " +
               (isActive
                 ? "bg-accent/10 ring-1 ring-accent/40 "
                 : "hover:bg-secondary/50 ") +
