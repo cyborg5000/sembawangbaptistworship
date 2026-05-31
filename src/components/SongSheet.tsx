@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
@@ -132,6 +133,13 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
         side="right"
         className="w-full sm:max-w-2xl overflow-y-auto bg-card p-0"
       >
+        {/* Accessible name + description for the dialog (visually hidden — visible header is below). */}
+        <VisuallyHidden.Root>
+          <SheetTitle>{song?.title ?? "Song details"}</SheetTitle>
+          <SheetDescription>
+            {song?.description || "Lyrics, pinyin, score and video for the selected worship song."}
+          </SheetDescription>
+        </VisuallyHidden.Root>
         {/* Polite live region for stanza-lock announcements (screen readers). */}
         <div
           role="status"
