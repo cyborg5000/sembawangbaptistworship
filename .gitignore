@@ -32,5 +32,4 @@ dist-ssr
 *.sw?
 
 # local env secrets - never commit
-.env
 .env.local
