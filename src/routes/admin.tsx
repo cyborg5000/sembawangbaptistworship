@@ -28,12 +28,14 @@ import {
   deleteSong,
   fetchSongs,
   updateSong,
+  normalizeTags,
   type Song,
   type SongInput,
 } from "@/lib/songs";
 import { buildSongIndex, searchRanked } from "@/lib/search";
 import { SongFormDialog } from "@/components/SongFormDialog";
 import { Pager } from "@/components/Pager";
+import { TagFilterBar } from "@/components/TagFilterBar";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/admin")({
@@ -151,21 +153,45 @@ function AdminDashboard() {
   const { data: songs = [] } = useQuery({ queryKey: ["songs", "all"], queryFn: fetchSongs });
 
   const [query, setQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Song | null>(null);
 
   const fuse = useMemo(() => buildSongIndex(songs), [songs]);
-  const rows = useMemo(
-    () => (query.trim() ? searchRanked(fuse, query) : songs),
-    [query, fuse, songs],
-  );
+
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of songs) {
+      for (const t of normalizeTags(s.tags)) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([tag, count]) => ({ tag, count }));
+  }, [songs]);
+
+  const toggleTag = (tag: string) =>
+    setSelectedTags((cur) =>
+      cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag],
+    );
+
+  const rows = useMemo(() => {
+    let list = query.trim() ? searchRanked(fuse, query) : songs;
+    if (selectedTags.length > 0) {
+      list = list.filter((s) =>
+        selectedTags.every((t) => (s.tags ?? []).includes(t)),
+      );
+    }
+    return list;
+  }, [query, fuse, songs, selectedTags]);
 
   // Pagination — 20 songs per page.
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
   useEffect(() => {
     setPage(1);
-  }, [query]);
+  }, [query, selectedTags]);
   const pageCount = Math.ceil(rows.length / PAGE_SIZE);
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -246,6 +272,17 @@ function AdminDashboard() {
             <Plus className="h-4 w-4" /> Add song
           </Button>
         </div>
+
+        {allTags.length > 0 && (
+          <div className="mb-4">
+            <TagFilterBar
+              tags={allTags}
+              selected={selectedTags}
+              onToggle={toggleTag}
+              onClear={() => setSelectedTags([])}
+            />
+          </div>
+        )}
 
         <div className="rounded-lg border border-border overflow-hidden">
           <Table>
