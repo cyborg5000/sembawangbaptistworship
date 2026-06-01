@@ -8,10 +8,13 @@ import {
   Pencil,
   Trash2,
   Search,
-  ArrowLeft,
   ImageIcon,
   Video,
   Globe,
+  ExternalLink,
+  Check,
+  X,
+  Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,7 +31,10 @@ import {
   deleteSong,
   fetchSongs,
   updateSong,
+  approvedVideoUrl,
   normalizeTags,
+  setSongVideoCandidate,
+  setSongVideoStatus,
   type Song,
   type SongInput,
 } from "@/lib/songs";
@@ -70,9 +76,7 @@ function LoginForm() {
     setBusy(true);
     try {
       const { error } =
-        mode === "signin"
-          ? await signIn(email, password)
-          : await signUp(email, password);
+        mode === "signin" ? await signIn(email, password) : await signUp(email, password);
       if (error) {
         toast.error(error.message);
       } else if (mode === "signup") {
@@ -92,17 +96,12 @@ function LoginForm() {
             Worship Songs · Admin
           </p>
         </div>
-        <form
-          onSubmit={submit}
-          className="space-y-4 rounded-lg border border-border bg-card p-6"
-        >
+        <form onSubmit={submit} className="space-y-4 rounded-lg border border-border bg-card p-6">
           <h1 className="font-serif-display text-2xl text-foreground">
             {mode === "signin" ? "Admin sign in" : "Create admin account"}
           </h1>
           <div className="space-y-1.5">
-            <label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Email
-            </label>
+            <label className="text-xs uppercase tracking-wider text-muted-foreground">Email</label>
             <Input
               type="email"
               value={email}
@@ -154,6 +153,7 @@ function AdminDashboard() {
 
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [videoFilter, setVideoFilter] = useState<"all" | "missing" | "pending">("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Song | null>(null);
 
@@ -172,26 +172,25 @@ function AdminDashboard() {
   }, [songs]);
 
   const toggleTag = (tag: string) =>
-    setSelectedTags((cur) =>
-      cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag],
-    );
+    setSelectedTags((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]));
 
   const rows = useMemo(() => {
     let list = query.trim() ? searchRanked(fuse, query) : songs;
     if (selectedTags.length > 0) {
-      list = list.filter((s) =>
-        selectedTags.every((t) => (s.tags ?? []).includes(t)),
-      );
+      list = list.filter((s) => selectedTags.every((t) => (s.tags ?? []).includes(t)));
     }
+    if (videoFilter === "missing") list = list.filter((s) => !approvedVideoUrl(s));
+    if (videoFilter === "pending")
+      list = list.filter((s) => s.video_status === "pending" && !!s.video_url?.trim());
     return list;
-  }, [query, fuse, songs, selectedTags]);
+  }, [query, fuse, songs, selectedTags, videoFilter]);
 
   // Pagination — 20 songs per page.
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
   useEffect(() => {
     setPage(1);
-  }, [query, selectedTags]);
+  }, [query, selectedTags, videoFilter]);
   const pageCount = Math.ceil(rows.length / PAGE_SIZE);
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -219,11 +218,60 @@ function AdminDashboard() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+  const videoCandidateMut = useMutation({
+    mutationFn: ({ id, url }: { id: string; url: string }) => setSongVideoCandidate(id, url),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["songs"] });
+      toast.success("YouTube video queued for approval");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const videoStatusMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "approved" | "rejected" }) =>
+      setSongVideoStatus(id, status),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["songs"] });
+      toast.success(vars.status === "approved" ? "Video approved" : "Video rejected");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const handleSubmit = async (input: SongInput) => {
-    if (editing) await updateMut.mutateAsync({ id: editing.id, input });
-    else await createMut.mutateAsync(input);
+    const videoChanged = (input.video_url ?? "").trim() !== (editing?.video_url ?? "").trim();
+    const nextInput =
+      videoChanged && input.video_url.trim()
+        ? { ...input, video_status: "pending" as const }
+        : input;
+    if (editing) await updateMut.mutateAsync({ id: editing.id, input: nextInput });
+    else await createMut.mutateAsync(nextInput);
   };
+
+  const openYouTubeSearch = (song: Song) => {
+    const terms = [
+      song.title_en || song.title,
+      song.title_en && song.title,
+      "worship song",
+      "lyrics",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    window.open(
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(terms)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
+  const queueYouTubeCandidate = (song: Song) => {
+    const url = window.prompt(`Paste the YouTube URL to queue for "${song.title}"`);
+    if (!url?.trim()) return;
+    videoCandidateMut.mutate({ id: song.id, url: url.trim() });
+  };
+
+  const liveVideoCount = songs.filter((s) => approvedVideoUrl(s)).length;
+  const pendingVideoCount = songs.filter(
+    (s) => s.video_status === "pending" && s.video_url?.trim(),
+  ).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -284,6 +332,24 @@ function AdminDashboard() {
           </div>
         )}
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <VideoFilterButton active={videoFilter === "all"} onClick={() => setVideoFilter("all")}>
+            All videos <span>{liveVideoCount}</span>
+          </VideoFilterButton>
+          <VideoFilterButton
+            active={videoFilter === "missing"}
+            onClick={() => setVideoFilter("missing")}
+          >
+            Needs video <span>{songs.length - liveVideoCount}</span>
+          </VideoFilterButton>
+          <VideoFilterButton
+            active={videoFilter === "pending"}
+            onClick={() => setVideoFilter("pending")}
+          >
+            Pending approval <span>{pendingVideoCount}</span>
+          </VideoFilterButton>
+        </div>
+
         <div className="rounded-lg border border-border overflow-hidden">
           <Table>
             <TableHeader>
@@ -293,8 +359,8 @@ function AdminDashboard() {
                 <TableHead className="hidden md:table-cell">English</TableHead>
                 <TableHead className="hidden lg:table-cell">Tags</TableHead>
                 <TableHead className="w-14 text-center">谱</TableHead>
-                <TableHead className="w-14 text-center">视频</TableHead>
-                <TableHead className="w-24 text-right">Actions</TableHead>
+                <TableHead className="w-[280px]">视频</TableHead>
+                <TableHead className="w-24 text-right">Edit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -303,9 +369,7 @@ function AdminDashboard() {
                   <TableCell className="text-xs text-muted-foreground tabular-nums">
                     {(page - 1) * PAGE_SIZE + i + 1}
                   </TableCell>
-                  <TableCell className="font-cn font-medium text-foreground">
-                    {s.title}
-                  </TableCell>
+                  <TableCell className="font-cn font-medium text-foreground">{s.title}</TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                     {s.title_en || "—"}
                   </TableCell>
@@ -330,9 +394,23 @@ function AdminDashboard() {
                   </TableCell>
                   <TableCell className="text-center">
                     {s.video_url ? (
-                      <Video className="h-4 w-4 mx-auto text-accent" />
+                      <VideoWorkflow
+                        song={s}
+                        onSearch={() => openYouTubeSearch(s)}
+                        onQueue={() => queueYouTubeCandidate(s)}
+                        onApprove={() => videoStatusMut.mutate({ id: s.id, status: "approved" })}
+                        onReject={() => videoStatusMut.mutate({ id: s.id, status: "rejected" })}
+                        busy={videoCandidateMut.isPending || videoStatusMut.isPending}
+                      />
                     ) : (
-                      <span className="text-muted-foreground/40">–</span>
+                      <VideoWorkflow
+                        song={s}
+                        onSearch={() => openYouTubeSearch(s)}
+                        onQueue={() => queueYouTubeCandidate(s)}
+                        onApprove={() => videoStatusMut.mutate({ id: s.id, status: "approved" })}
+                        onReject={() => videoStatusMut.mutate({ id: s.id, status: "rejected" })}
+                        busy={videoCandidateMut.isPending || videoStatusMut.isPending}
+                      />
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -387,6 +465,136 @@ function AdminDashboard() {
         initial={editing}
         onSubmit={handleSubmit}
       />
+    </div>
+  );
+}
+
+function VideoFilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors " +
+        (active
+          ? "border-accent/40 bg-accent/10 text-foreground"
+          : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground")
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function VideoWorkflow({
+  song,
+  onSearch,
+  onQueue,
+  onApprove,
+  onReject,
+  busy,
+}: {
+  song: Song;
+  onSearch: () => void;
+  onQueue: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+  busy: boolean;
+}) {
+  const liveUrl = approvedVideoUrl(song);
+  const pending = song.video_status === "pending" && !!song.video_url?.trim();
+  const rejected = song.video_status === "rejected" && !!song.video_url?.trim();
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {liveUrl ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-1 text-[11px] text-foreground">
+          <Check className="h-3 w-3" />
+          Approved
+        </span>
+      ) : pending ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[11px] text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          Pending
+        </span>
+      ) : rejected ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-[11px] text-destructive">
+          <X className="h-3 w-3" />
+          Rejected
+        </span>
+      ) : (
+        <span className="text-[11px] text-muted-foreground">No approved video</span>
+      )}
+
+      {song.video_url?.trim() && (
+        <a
+          href={song.video_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+          aria-label="Open video"
+        >
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      )}
+      {pending && (
+        <>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-accent"
+            onClick={onApprove}
+            disabled={busy}
+            aria-label="Approve YouTube video"
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-destructive"
+            onClick={onReject}
+            disabled={busy}
+            aria-label="Reject YouTube video"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </>
+      )}
+      {!liveUrl && (
+        <>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={onSearch}
+            aria-label="Search YouTube"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs"
+            onClick={onQueue}
+            disabled={busy}
+          >
+            Queue
+          </Button>
+        </>
+      )}
     </div>
   );
 }

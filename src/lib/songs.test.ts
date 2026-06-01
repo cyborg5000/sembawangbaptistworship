@@ -5,6 +5,7 @@ import {
   normalizeKeepSpaces,
   tokenizeQuery,
   matchesSong,
+  approvedVideoUrl,
   type Song,
 } from "./songs";
 
@@ -18,6 +19,8 @@ const song = (over: Partial<Song> = {}): Song => ({
   pinyin: "",
   score_url: "",
   video_url: "",
+  video_status: "none",
+  video_source: "",
   tags: [],
   created_at: "",
   updated_at: "",
@@ -120,5 +123,20 @@ describe("matchesSong", () => {
 
   it("empty query matches anything", () => {
     expect(matchesSong(s, "")).toBe(true);
+  });
+});
+
+describe("approvedVideoUrl", () => {
+  it("only exposes approved videos", () => {
+    expect(
+      approvedVideoUrl(
+        song({ video_url: "https://youtu.be/abcdefghijk", video_status: "pending" }),
+      ),
+    ).toBe("");
+    expect(
+      approvedVideoUrl(
+        song({ video_url: "https://youtu.be/abcdefghijk", video_status: "approved" }),
+      ),
+    ).toBe("https://youtu.be/abcdefghijk");
   });
 });

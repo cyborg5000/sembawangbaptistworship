@@ -29,6 +29,8 @@ const empty: SongInput = {
   pinyin: "",
   score_url: "",
   video_url: "",
+  video_status: "none",
+  video_source: "",
   tags: [],
 };
 
@@ -49,6 +51,8 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: Props)
               pinyin: initial.pinyin,
               score_url: initial.score_url,
               video_url: initial.video_url,
+              video_status: initial.video_status ?? "none",
+              video_source: initial.video_source ?? "",
               tags: initial.tags ?? [],
             }
           : empty,

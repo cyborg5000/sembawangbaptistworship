@@ -11,6 +11,8 @@ const mk = (over: Partial<Song> = {}): Song => ({
   pinyin: "",
   score_url: "",
   video_url: "",
+  video_status: "none",
+  video_source: "",
   tags: [],
   created_at: "",
   updated_at: "",
@@ -19,18 +21,12 @@ const mk = (over: Partial<Song> = {}): Song => ({
 
 describe("normalizeTags", () => {
   it("trims, lowercases, collapses whitespace", () => {
-    expect(normalizeTags(["  Praise  ", "  PRAISE\tTEAM "])).toEqual([
-      "praise",
-      "praise team",
-    ]);
+    expect(normalizeTags(["  Praise  ", "  PRAISE\tTEAM "])).toEqual(["praise", "praise team"]);
   });
 
   it("removes duplicates while preserving first-seen order", () => {
     expect(normalizeTags(["praise", "Praise", "PRAISE"])).toEqual(["praise"]);
-    expect(normalizeTags(["communion", "praise", "communion"])).toEqual([
-      "communion",
-      "praise",
-    ]);
+    expect(normalizeTags(["communion", "praise", "communion"])).toEqual(["communion", "praise"]);
   });
 
   it("drops empty / whitespace-only entries", () => {
@@ -89,23 +85,15 @@ describe("tag filter bar — AND logic across chips", () => {
   ];
 
   it("single chip narrows the list", () => {
-    expect(filterByTags(library, ["praise"]).map((s) => s.id)).toEqual([
-      "a",
-      "b",
-      "d",
-    ]);
+    expect(filterByTags(library, ["praise"]).map((s) => s.id)).toEqual(["a", "b", "d"]);
   });
 
   it("two chips require BOTH tags on the song (AND)", () => {
-    expect(
-      filterByTags(library, ["praise", "communion"]).map((s) => s.id),
-    ).toEqual(["b", "d"]);
+    expect(filterByTags(library, ["praise", "communion"]).map((s) => s.id)).toEqual(["b", "d"]);
   });
 
   it("returns empty when no song matches every selected chip", () => {
-    expect(filterByTags(library, ["praise", "sunday", "communion"])).toEqual(
-      [],
-    );
+    expect(filterByTags(library, ["praise", "sunday", "communion"])).toEqual([]);
   });
 
   it("empty selection returns the full list", () => {

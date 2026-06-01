@@ -6,14 +6,16 @@ import type { Song } from "@/lib/songs";
 
 const song: Song = {
   id: "song-1",
-  title: "Amazing Grace",
+  title: "奇异恩典",
   title_en: "",
   description: "Hymn",
-  lyrics: "Amazing grace how sweet the sound\n\nThat saved a wretch like me\n\nI once was lost but now am found",
+  lyrics: "奇异恩典何等甘甜\n\n我罪已得赦免\n\n前我失丧今被寻回",
   lyrics_en: "",
   pinyin: "qí yì ēn diǎn\n\njiù wǒ huí jiā",
   score_url: "",
   video_url: "",
+  video_status: "none",
+  video_source: "",
   tags: [],
   created_at: "",
   updated_at: "",
@@ -43,13 +45,31 @@ describe("SongSheet stanza interaction", () => {
     window.localStorage.clear();
   });
 
-  it("renders ARIA-labeled lyric stanza buttons + a pinyin toggle", () => {
+  it("renders ARIA-labeled lyric stanza buttons + a pinyin toggle for Chinese lyrics", () => {
     setup();
-    expect(
-      screen.getByLabelText(/Lyrics stanza 1 of 3/i),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Lyrics stanza 1 of 3/i)).toBeInTheDocument();
     // Pinyin is now an interlinear toggle rather than a separate section.
     expect(screen.getByText(/拼音 Pinyin/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Close song details/i)).toBeInTheDocument();
+  });
+
+  it("hides the pinyin toggle when the lyrics are English-only", () => {
+    setup({
+      song: {
+        ...song,
+        title: "Amazing Grace",
+        lyrics:
+          "Amazing grace how sweet the sound\n\nThat saved a wretch like me\n\nI once was lost but now am found",
+        pinyin: "",
+      },
+    });
+    expect(screen.queryByText(/拼音 Pinyin/i)).not.toBeInTheDocument();
+  });
+
+  it("closes the sheet from the header close button", async () => {
+    const { props } = setup();
+    await userEvent.click(screen.getByLabelText(/Close song details/i));
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it("locks a stanza on click, centers it via scrollIntoView, and updates aria-pressed", async () => {
@@ -123,9 +143,7 @@ describe("SongSheet stanza interaction", () => {
   it("persists the locked stanza under a versioned + stanza-count-scoped key", async () => {
     setup();
     await userEvent.click(getLyricStanzas()[1]);
-    expect(window.localStorage.getItem("sbc-active-stanza-v2:song-1:3")).toBe(
-      "1",
-    );
+    expect(window.localStorage.getItem("sbc-active-stanza-v2:song-1:3")).toBe("1");
   });
 
   it("restores a valid stored stanza on mount", () => {
@@ -144,9 +162,7 @@ describe("SongSheet stanza interaction", () => {
       expect(s).toHaveAttribute("aria-pressed", "false");
     }
     // And it should be cleaned up.
-    expect(
-      window.localStorage.getItem("sbc-active-stanza-v2:song-1:3"),
-    ).toBeNull();
+    expect(window.localStorage.getItem("sbc-active-stanza-v2:song-1:3")).toBeNull();
   });
 
   it("ignores stored values written under an older key version", () => {

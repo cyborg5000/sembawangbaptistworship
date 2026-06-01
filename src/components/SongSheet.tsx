@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
-import { Heart, Pencil, Trash2, ExternalLink } from "lucide-react";
-import { type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
+import { Heart, Pencil, Trash2, ExternalLink, X } from "lucide-react";
+import { approvedVideoUrl, type Song, youtubeEmbed, tokenizeQuery } from "@/lib/songs";
 import { songPinyin, linePinyin } from "@/lib/pinyin";
 import { useFavorites } from "@/hooks/use-favorites";
 
@@ -22,6 +22,8 @@ interface Props {
  * shift). Stale entries from older versions are ignored and overwritten lazily.
  */
 const STANZA_KEY_VERSION = "v2";
+const CJK = /[\u4e00-\u9fff]/;
+
 function stanzaStorageKey(songId: string, stanzaCount: number): string {
   return `sbc-active-stanza-${STANZA_KEY_VERSION}:${songId}:${stanzaCount}`;
 }
@@ -58,10 +60,9 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
   const displayTitle =
     lang === "en" && song?.title_en?.trim() ? song.title_en : (song?.title ?? "");
   // Hanyu pinyin generated from the Chinese lyrics (cached), never stored.
-  const pinyinText = useMemo(
-    () => (song ? songPinyin(song) : ""),
-    [song?.id, song?.lyrics],
-  );
+  const pinyinText = useMemo(() => (song ? songPinyin(song) : ""), [song?.id, song?.lyrics]);
+  const canShowPinyin = lang === "zh" && CJK.test(activeLyrics);
+  const liveVideoUrl = song ? approvedVideoUrl(song) : "";
 
   // Lyric stanza count drives keyboard navigation bounds + the versioned key.
   const lyricStanzaCount = useMemo(
@@ -114,9 +115,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
     if (activeStanza === null) {
       setAnnouncement("");
     } else if (lyricStanzaCount > 0) {
-      setAnnouncement(
-        `Stanza ${activeStanza + 1} of ${lyricStanzaCount} locked`,
-      );
+      setAnnouncement(`Stanza ${activeStanza + 1} of ${lyricStanzaCount} locked`);
     }
   }, [activeStanza, lyricStanzaCount]);
 
@@ -151,10 +150,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-2xl overflow-y-auto bg-card p-0"
-      >
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto bg-card p-0">
         {/* Accessible name + description for the dialog (visually hidden — visible header is below). */}
         <VisuallyHidden.Root>
           <SheetTitle>{song?.title ?? "Song details"}</SheetTitle>
@@ -202,18 +198,28 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                       aria-label="Lyrics language"
                       className="mt-4 inline-flex rounded-full border border-border p-0.5 bg-secondary/40"
                     >
-                      <LangTab active={lang === "zh"} onClick={() => { setLang("zh"); setActiveStanza(null); }}>
+                      <LangTab
+                        active={lang === "zh"}
+                        onClick={() => {
+                          setLang("zh");
+                          setActiveStanza(null);
+                        }}
+                      >
                         中文
                       </LangTab>
-                      <LangTab active={lang === "en"} onClick={() => { setLang("en"); setActiveStanza(null); }}>
+                      <LangTab
+                        active={lang === "en"}
+                        onClick={() => {
+                          setLang("en");
+                          setActiveStanza(null);
+                        }}
+                      >
                         English
                       </LangTab>
                     </div>
                   )}
                   {song.description && (
-                    <p className="mt-3 text-sm text-muted-foreground italic">
-                      {song.description}
-                    </p>
+                    <p className="mt-3 text-sm text-muted-foreground italic">{song.description}</p>
                   )}
                   {song.tags && song.tags.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -237,11 +243,17 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                   >
                     <Heart
                       className={
-                        isFavorite(song.id)
-                          ? "fill-accent text-accent"
-                          : "text-muted-foreground"
+                        isFavorite(song.id) ? "fill-accent text-accent" : "text-muted-foreground"
                       }
                     />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onOpenChange(false)}
+                    aria-label="Close song details"
+                  >
+                    <X className="text-muted-foreground" />
                   </Button>
                   {onEdit && (
                     <Button
@@ -270,9 +282,9 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
             {/* Body */}
             <div className="px-8 py-8 space-y-10">
               {/* Video */}
-              {song.video_url &&
+              {liveVideoUrl &&
                 (() => {
-                  const embed = youtubeEmbed(song.video_url);
+                  const embed = youtubeEmbed(liveVideoUrl);
                   return (
                     <section>
                       <SectionLabel>Video</SectionLabel>
@@ -286,15 +298,15 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                             allowFullScreen
                           />
                         </div>
-                      ) : song.video_url.match(/\.(mp4|webm|ogg)$/i) ? (
+                      ) : liveVideoUrl.match(/\.(mp4|webm|ogg)$/i) ? (
                         <video
-                          src={song.video_url}
+                          src={liveVideoUrl}
                           controls
                           className="w-full rounded-md border border-border"
                         />
                       ) : (
                         <a
-                          href={song.video_url}
+                          href={liveVideoUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
@@ -314,7 +326,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                       {lang === "en" ? "Lyrics · English" : "Lyrics · 歌词"}
                     </span>
                     <span className="flex items-center gap-3">
-                      {lang === "zh" && pinyinText && (
+                      {canShowPinyin && pinyinText && (
                         <button
                           type="button"
                           onClick={() => setShowPinyin((v) => !v)}
@@ -338,7 +350,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                     active={activeStanza}
                     onSelect={setActiveStanza}
                     ariaLabelPrefix="Lyrics stanza"
-                    interlinearPinyin={lang === "zh" && showPinyin}
+                    interlinearPinyin={canShowPinyin && showPinyin}
                     className={
                       lang === "en"
                         ? "lyric-text text-foreground"
@@ -378,7 +390,7 @@ export function SongSheet({ song, open, onOpenChange, onEdit, onDelete, query = 
                 </section>
               )}
 
-              {!song.lyrics && !song.score_url && !song.video_url && (
+              {!song.lyrics && !song.score_url && !liveVideoUrl && (
                 <p className="text-sm text-muted-foreground italic">
                   No content yet. Edit this song to add lyrics, a score image, or a video.
                 </p>
@@ -422,9 +434,7 @@ function LangTab({
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center gap-3">
-      <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-        {children}
-      </span>
+      <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{children}</span>
       <span className="h-px flex-1 bg-border" />
     </div>
   );
@@ -508,9 +518,7 @@ function Stanzas({
             className={
               "block w-full text-left rounded-md px-4 py-3 -mx-4 scroll-mt-32 transition-all " +
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card " +
-              (isActive
-                ? "bg-accent/10 ring-1 ring-accent/40 "
-                : "hover:bg-secondary/50 ") +
+              (isActive ? "bg-accent/10 ring-1 ring-accent/40 " : "hover:bg-secondary/50 ") +
               (dimmed ? "opacity-40 " : "")
             }
           >
@@ -552,12 +560,12 @@ function escapeRegExp(s: string): string {
 function Highlight({ text, tokens }: { text: string; tokens: string[] }) {
   if (!tokens.length || !text) return <>{text}</>;
   // Strip diacritics from text for matching, but render original chars.
-  const folded = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const folded = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
   // Folded string preserves character count because we only remove combining marks.
-  const pattern = new RegExp(
-    "(" + tokens.map(escapeRegExp).join("|") + ")",
-    "gi",
-  );
+  const pattern = new RegExp("(" + tokens.map(escapeRegExp).join("|") + ")", "gi");
   const parts: Array<{ start: number; end: number; match: boolean }> = [];
   let last = 0;
   for (const m of folded.matchAll(pattern)) {

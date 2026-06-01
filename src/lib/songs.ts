@@ -16,12 +16,16 @@ export type Song = {
   pinyin: string;
   score_url: string;
   video_url: string;
+  video_status: VideoStatus;
+  video_source: VideoSource;
   tags: string[];
   created_at: string;
   updated_at: string;
 };
 
 export type SongInput = Omit<Song, "id" | "created_at" | "updated_at">;
+export type VideoStatus = "none" | "pending" | "approved" | "rejected";
+export type VideoSource = "" | "cloudinary" | "youtube" | "direct";
 
 /** Normalize a list of tags: trim, lowercase, drop empties, dedupe (stable order). */
 export function normalizeTags(tags: readonly string[] | null | undefined): string[] {
@@ -67,10 +71,7 @@ function escapeIlike(s: string): string {
  * text matches use the trigram index on `tags_text`/`title`. Client code
  * may still apply `matchesSong` afterwards for pinyin/CJK nuance.
  */
-export async function searchSongs(opts: {
-  query?: string;
-  tags?: string[];
-}): Promise<Song[]> {
+export async function searchSongs(opts: { query?: string; tags?: string[] }): Promise<Song[]> {
   const q = (opts.query ?? "").trim();
   const tags = normalizeTags(opts.tags);
   let req = db.from("songs").select("*").order("title", { ascending: true });
@@ -100,12 +101,12 @@ export async function searchSongs(opts: {
 }
 
 export async function createSong(input: SongInput): Promise<Song> {
-  const payload = { ...input, tags: normalizeTags(input.tags) };
-  const { data, error } = await db
-    .from("songs")
-    .insert(payload)
-    .select()
-    .single();
+  const payload = {
+    ...input,
+    tags: normalizeTags(input.tags),
+    ...normalizeVideoPayload(input.video_url, input.video_status),
+  };
+  const { data, error } = await db.from("songs").insert(payload).select().single();
   if (error) throw error;
   return data as Song;
 }
@@ -116,9 +117,43 @@ export async function updateSong(id: string, input: Partial<SongInput>): Promise
     updated_at: new Date().toISOString(),
   };
   if (input.tags !== undefined) payload.tags = normalizeTags(input.tags);
+  if (input.video_url !== undefined) {
+    Object.assign(payload, normalizeVideoPayload(input.video_url, input.video_status));
+  }
+  const { data, error } = await db.from("songs").update(payload).eq("id", id).select().single();
+  if (error) throw error;
+  return data as Song;
+}
+
+export async function setSongVideoCandidate(id: string, url: string): Promise<Song> {
+  const payload = normalizeVideoPayload(url, "pending");
+  if (payload.video_source !== "youtube") {
+    throw new Error("Only YouTube links can be queued for approval.");
+  }
   const { data, error } = await db
     .from("songs")
-    .update(payload)
+    .update({
+      ...payload,
+      video_status: "pending",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Song;
+}
+
+export async function setSongVideoStatus(
+  id: string,
+  status: Extract<VideoStatus, "approved" | "rejected">,
+): Promise<Song> {
+  const { data, error } = await db
+    .from("songs")
+    .update({
+      video_status: status,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .select()
     .single();
@@ -193,4 +228,41 @@ export function youtubeEmbed(url: string): string | null {
     /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/,
   );
   return m ? `https://www.youtube.com/embed/${m[1]}` : null;
+}
+
+export function detectVideoSource(url: string): VideoSource {
+  const clean = url.trim();
+  if (!clean) return "";
+  if (/res\.cloudinary\.com|cloudinary\.com/i.test(clean)) return "cloudinary";
+  if (youtubeEmbed(clean)) return "youtube";
+  return "direct";
+}
+
+export function approvedVideoUrl(
+  song: Pick<Song, "video_url"> & { video_status?: VideoStatus },
+): string {
+  if (
+    (song.video_status === "approved" || song.video_status === undefined) &&
+    song.video_url?.trim()
+  ) {
+    return song.video_url.trim();
+  }
+  return "";
+}
+
+function normalizeVideoPayload(
+  url: string | null | undefined,
+  status?: VideoStatus,
+): { video_url: string; video_status: VideoStatus; video_source: VideoSource } {
+  const clean = (url ?? "").trim();
+  const source = detectVideoSource(clean);
+  if (!clean) {
+    return { video_url: "", video_status: "none", video_source: "" };
+  }
+  const effectiveStatus = status && status !== "none" ? status : "pending";
+  return {
+    video_url: clean,
+    video_status: effectiveStatus,
+    video_source: source,
+  };
 }

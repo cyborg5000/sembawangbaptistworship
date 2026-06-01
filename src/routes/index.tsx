@@ -12,32 +12,26 @@ import {
   FileMusic,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  fetchSongs,
-  normalizeTags,
-  type Song,
-} from "@/lib/songs";
+import { approvedVideoUrl, fetchSongs, normalizeTags, type Song } from "@/lib/songs";
 import { buildSongIndex, searchRanked } from "@/lib/search";
 import { useFavorites } from "@/hooks/use-favorites";
 import { SongSheet } from "@/components/SongSheet";
 import { TagFilterBar } from "@/components/TagFilterBar";
 import { Pager } from "@/components/Pager";
+import { SITE_DESCRIPTION, SITE_TITLE, siteAsset } from "@/lib/site-meta";
 import logoUrl from "@/assets/sbc-logo.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "诗歌库 · Sembawang Baptist Church Worship Songs" },
-      {
-        name: "description",
-        content:
-          "Search worship songs by title, lyrics, description, or hanyu pinyin. A worship resource for Sembawang Baptist Church 森峇旺浸信教会.",
-      },
-      { property: "og:title", content: "诗歌库 · SBC Worship Songs" },
-      {
-        property: "og:description",
-        content: "Search and select worship songs for Sembawang Baptist Church.",
-      },
+      { title: SITE_TITLE },
+      { name: "description", content: SITE_DESCRIPTION },
+      { property: "og:title", content: SITE_TITLE },
+      { property: "og:description", content: SITE_DESCRIPTION },
+      { property: "og:image", content: siteAsset("/og-image.png") },
+      { name: "twitter:title", content: SITE_TITLE },
+      { name: "twitter:description", content: SITE_DESCRIPTION },
+      { name: "twitter:image", content: siteAsset("/og-image.png") },
     ],
   }),
   component: Index,
@@ -85,24 +79,20 @@ function Index() {
   }, [allSongs]);
 
   const toggleTag = (tag: string) =>
-    setSelectedTags((cur) =>
-      cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag],
-    );
+    setSelectedTags((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]));
 
   const filtered = useMemo(() => {
     // Ranked fuzzy search when there's a query; otherwise the full list (A–Z).
     let list = debouncedQuery.trim() ? searchRanked(fuse, debouncedQuery) : allSongs;
     // Tag chips: AND semantics — keep songs carrying every selected tag.
     if (selectedTags.length > 0)
-      list = list.filter((s) =>
-        selectedTags.every((t) => (s.tags ?? []).includes(t)),
-      );
+      list = list.filter((s) => selectedTags.every((t) => (s.tags ?? []).includes(t)));
     // Content filters (AND): keep only songs that have the chosen resources.
     if (needs.includes("lyrics")) list = list.filter((s) => s.lyrics?.trim());
     if (needs.includes("english"))
       list = list.filter((s) => s.lyrics_en?.trim() || s.title_en?.trim());
     if (needs.includes("score")) list = list.filter((s) => s.score_url?.trim());
-    if (needs.includes("video")) list = list.filter((s) => s.video_url?.trim());
+    if (needs.includes("video")) list = list.filter((s) => approvedVideoUrl(s));
     if (view === "favorites") list = list.filter((s) => favorites.includes(s.id));
     return list;
   }, [fuse, allSongs, debouncedQuery, selectedTags, needs, view, favorites]);
@@ -162,8 +152,8 @@ function Index() {
           <span className="italic text-accent">that lifts the room.</span>
         </h1>
         <p className="mt-5 max-w-xl text-muted-foreground">
-          Search by title, description, lyric, or hanyu pinyin. Save favourites
-          for quick recall before service.
+          Search by title, description, lyric, or hanyu pinyin. Save favourites for quick recall
+          before service.
         </p>
 
         <div className="mt-10 relative">
@@ -240,44 +230,44 @@ function Index() {
           <ul className="divide-y divide-border border-y border-border">
             {visible.map((s, i) => (
               <li key={s.id}>
-                <button
-                  onClick={() => openSong(s)}
-                  className="group w-full text-left px-2 sm:px-4 py-5 flex items-center gap-5 hover:bg-secondary/60 transition-colors"
-                >
-                  <span className="font-serif-display text-2xl sm:text-3xl text-muted-foreground/60 group-hover:text-accent transition-colors w-10 tabular-nums shrink-0">
-                    {((page - 1) * PAGE_SIZE + i + 1).toString().padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <p className="font-serif-display text-xl sm:text-2xl text-foreground truncate font-medium">
-                        {s.title}
-                      </p>
-                      <SongBadges song={s} />
-                    </div>
-                    {(s.description || s.title_en) && (
-                      <p className="text-sm text-muted-foreground truncate mt-0.5">
-                        {s.description || s.title_en}
-                      </p>
-                    )}
-                    {s.tags && s.tags.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {s.tags.slice(0, 6).map((t) => (
-                          <span
-                            key={t}
-                            className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="group flex items-center gap-2 px-2 py-2 transition-colors hover:bg-secondary/60 sm:px-4">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggle(s.id);
-                    }}
+                    onClick={() => openSong(s)}
+                    className="flex min-w-0 flex-1 items-center gap-5 py-3 text-left"
+                  >
+                    <span className="font-serif-display w-10 shrink-0 tabular-nums text-2xl text-muted-foreground/60 transition-colors group-hover:text-accent sm:text-3xl">
+                      {((page - 1) * PAGE_SIZE + i + 1).toString().padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <p className="font-serif-display truncate text-xl font-medium text-foreground sm:text-2xl">
+                          {s.title}
+                        </p>
+                        <SongBadges song={s} />
+                      </div>
+                      {(s.description || s.title_en) && (
+                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                          {s.description || s.title_en}
+                        </p>
+                      )}
+                      {s.tags && s.tags.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {s.tags.slice(0, 6).map((t) => (
+                            <span
+                              key={t}
+                              className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggle(s.id)}
                     className="p-2 rounded-sm hover:bg-background transition-colors shrink-0"
                     aria-label="Toggle favourite"
                   >
@@ -290,7 +280,7 @@ function Index() {
                       }
                     />
                   </button>
-                </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -305,12 +295,7 @@ function Index() {
         </div>
       </footer>
 
-      <SongSheet
-        song={activeSong}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        query={query}
-      />
+      <SongSheet song={activeSong} open={sheetOpen} onOpenChange={setSheetOpen} query={query} />
     </div>
   );
 }
@@ -320,7 +305,7 @@ function SongBadges({ song }: { song: Song }) {
   const hasLyrics = !!song.lyrics?.trim();
   const hasEnglish = !!(song.lyrics_en?.trim() || song.title_en?.trim());
   const hasScore = !!song.score_url?.trim();
-  const hasVideo = !!song.video_url?.trim();
+  const hasVideo = !!approvedVideoUrl(song);
   return (
     <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground/70">
       {hasLyrics && <FileText className="h-3.5 w-3.5" aria-label="Has lyrics" />}

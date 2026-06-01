@@ -25,11 +25,13 @@ bun run test        # vitest unit tests (48 tests)
 - `/admin` — Supabase-auth login + management table (search, add, edit, delete), 20/page.
 
 ## 4. Data model — Supabase `songs` table
-`id, title, title_en, description, lyrics, lyrics_en, pinyin, score_url, video_url, tags[] (+ tags_text), created_at, updated_at`
+`id, title, title_en, description, lyrics, lyrics_en, pinyin, score_url, video_url, video_status, video_source, tags[] (+ tags_text), created_at, updated_at`
 - **title/lyrics** = Chinese (Simplified). **title_en/lyrics_en** = English — **only real, printed English** (never machine-translated; empty if none).
 - **pinyin** column is unused — hanyu pinyin is **generated on the fly** (`pinyin-pro`), never stored.
 - **score_url** may hold **multiple newline-separated URLs** (multi-page scores).
-- **video_url** = a Cloudinary mp4 (or a YouTube link — `youtubeEmbed()` handles both).
+- **video_url** = a Cloudinary mp4, YouTube link, or direct video URL.
+- **video_status** = `none | pending | approved | rejected`. Only `approved` videos show on the public song sheet.
+- Existing checked videos are approved; every future newly pasted/replaced video URL starts as `pending` until approved in admin.
 - No `audio_url` column yet (see Follow-ups).
 
 ## 5. Key source files
