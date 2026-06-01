@@ -11,8 +11,10 @@ import {
 const song = (over: Partial<Song> = {}): Song => ({
   id: "1",
   title: "",
+  title_en: "",
   description: "",
   lyrics: "",
+  lyrics_en: "",
   pinyin: "",
   score_url: "",
   video_url: "",
