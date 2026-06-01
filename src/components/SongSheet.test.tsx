@@ -7,8 +7,10 @@ import type { Song } from "@/lib/songs";
 const song: Song = {
   id: "song-1",
   title: "Amazing Grace",
+  title_en: "",
   description: "Hymn",
   lyrics: "Amazing grace how sweet the sound\n\nThat saved a wretch like me\n\nI once was lost but now am found",
+  lyrics_en: "",
   pinyin: "qí yì ēn diǎn\n\njiù wǒ huí jiā",
   score_url: "",
   video_url: "",

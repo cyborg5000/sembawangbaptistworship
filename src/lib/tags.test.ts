@@ -4,8 +4,10 @@ import { normalizeTags, matchesSong, type Song } from "./songs";
 const mk = (over: Partial<Song> = {}): Song => ({
   id: "1",
   title: "",
+  title_en: "",
   description: "",
   lyrics: "",
+  lyrics_en: "",
   pinyin: "",
   score_url: "",
   video_url: "",
