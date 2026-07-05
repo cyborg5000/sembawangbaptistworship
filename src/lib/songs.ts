@@ -1,10 +1,12 @@
-import { supabase } from "@/integrations/supabase/client";
 import { songPinyin, titlePinyin } from "@/lib/pinyin";
-
-// Supabase types regenerate after migrations propagate; cast to keep
-// the build green meanwhile.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any;
+import {
+  listSongs,
+  createSongFn,
+  updateSongFn,
+  setVideoCandidateFn,
+  setVideoStatusFn,
+  deleteSongFn,
+} from "@/lib/api/songs.functions";
 
 export type Song = {
   id: string;
@@ -43,127 +45,49 @@ export function normalizeTags(tags: readonly string[] | null | undefined): strin
 }
 
 export async function fetchSongs(): Promise<Song[]> {
-  // PostgREST caps each response at ~1000 rows. Page through with .range()
-  // until a short batch comes back, so the whole library always loads.
-  const PAGE = 1000;
-  const all: Song[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("songs")
-      .select("*")
-      .order("title", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const batch = (data ?? []) as Song[];
-    all.push(...batch);
-    if (batch.length < PAGE) break;
-  }
-  return all;
-}
-
-/** Escape PostgREST ILIKE pattern wildcards in a user-supplied query. */
-function escapeIlike(s: string): string {
-  return s.replace(/[\\%_,]/g, (c) => "\\" + c);
+  return await listSongs();
 }
 
 /**
- * Server-side search. Tag filters use the GIN index on `tags`; partial
- * text matches use the trigram index on `tags_text`/`title`. Client code
- * may still apply `matchesSong` afterwards for pinyin/CJK nuance.
+ * Search over the loaded library. Tag chips use AND-containment; the text
+ * query uses `matchesSong` (tone-folded pinyin + CJK aware). Runs on the
+ * client over the full list returned by `fetchSongs`.
  */
 export async function searchSongs(opts: { query?: string; tags?: string[] }): Promise<Song[]> {
   const q = (opts.query ?? "").trim();
   const tags = normalizeTags(opts.tags);
-  let req = db.from("songs").select("*").order("title", { ascending: true });
-
-  // Exact-tag chip filter — AND semantics via array containment (GIN-backed).
-  if (tags.length > 0) req = req.contains("tags", tags);
-
-  // ASCII queries → push partial-text matching to the database (trigram).
-  // Non-ASCII (CJK / accented pinyin) falls through to client matchesSong,
-  // which understands tone-folding and ü/v variants.
-  if (q && /^[\x20-\x7e]+$/.test(q)) {
-    const like = `*${escapeIlike(q)}*`;
-    req = req.or(
-      [
-        `tags_text.ilike.${like}`,
-        `title.ilike.${like}`,
-        `title_en.ilike.${like}`,
-        `lyrics_en.ilike.${like}`,
-        `description.ilike.${like}`,
-      ].join(","),
-    );
-  }
-
-  const { data, error } = await req;
-  if (error) throw error;
-  return (data ?? []) as Song[];
+  const all = await fetchSongs();
+  return all.filter((song) => {
+    if (tags.length > 0) {
+      const songTags = new Set(normalizeTags(song.tags));
+      if (!tags.every((t) => songTags.has(t))) return false;
+    }
+    if (q && !matchesSong(song, q)) return false;
+    return true;
+  });
 }
 
 export async function createSong(input: SongInput): Promise<Song> {
-  const payload = {
-    ...input,
-    tags: normalizeTags(input.tags),
-    ...normalizeVideoPayload(input.video_url, input.video_status),
-  };
-  const { data, error } = await db.from("songs").insert(payload).select().single();
-  if (error) throw error;
-  return data as Song;
+  return await createSongFn({ data: input });
 }
 
 export async function updateSong(id: string, input: Partial<SongInput>): Promise<Song> {
-  const payload: Record<string, unknown> = {
-    ...input,
-    updated_at: new Date().toISOString(),
-  };
-  if (input.tags !== undefined) payload.tags = normalizeTags(input.tags);
-  if (input.video_url !== undefined) {
-    Object.assign(payload, normalizeVideoPayload(input.video_url, input.video_status));
-  }
-  const { data, error } = await db.from("songs").update(payload).eq("id", id).select().single();
-  if (error) throw error;
-  return data as Song;
+  return await updateSongFn({ data: { id, input } });
 }
 
 export async function setSongVideoCandidate(id: string, url: string): Promise<Song> {
-  const payload = normalizeVideoPayload(url, "pending");
-  if (payload.video_source !== "youtube") {
-    throw new Error("Only YouTube links can be queued for approval.");
-  }
-  const { data, error } = await db
-    .from("songs")
-    .update({
-      ...payload,
-      video_status: "pending",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as Song;
+  return await setVideoCandidateFn({ data: { id, url } });
 }
 
 export async function setSongVideoStatus(
   id: string,
   status: Extract<VideoStatus, "approved" | "rejected">,
 ): Promise<Song> {
-  const { data, error } = await db
-    .from("songs")
-    .update({
-      video_status: status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as Song;
+  return await setVideoStatusFn({ data: { id, status } });
 }
 
 export async function deleteSong(id: string): Promise<void> {
-  const { error } = await db.from("songs").delete().eq("id", id);
-  if (error) throw error;
+  await deleteSongFn({ data: { id } });
 }
 
 /** Fold pinyin: strip tone-number suffixes (ni3 → ni) and map v → u (lv → lu). */
@@ -250,7 +174,7 @@ export function approvedVideoUrl(
   return "";
 }
 
-function normalizeVideoPayload(
+export function normalizeVideoPayload(
   url: string | null | undefined,
   status?: VideoStatus,
 ): { video_url: string; video_status: VideoStatus; video_source: VideoSource } {

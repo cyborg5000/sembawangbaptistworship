@@ -33,3 +33,4 @@ dist-ssr
 
 # local env secrets - never commit
 .env.local
+.vercel/

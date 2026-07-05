@@ -1,37 +1,34 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Session } from "@supabase/supabase-js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { meFn, loginFn, logoutFn } from "@/lib/api/auth.functions";
 
-/** Tracks the current Supabase auth session (admin login). */
+/**
+ * Tracks the current admin session (Sam Stack auth on Neon). Backed by a
+ * shared react-query cache so every useAuth() consumer re-renders together
+ * after sign in / out (replaces Supabase's global onAuthStateChange).
+ */
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (active) {
-        setSession(data.session);
-        setLoading(false);
-      }
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-    });
-    return () => {
-      active = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
+  const qc = useQueryClient();
+  const { data: user = null, isLoading } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: () => meFn(),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   return {
-    session,
-    loading,
-    email: session?.user?.email ?? null,
-    signIn: (email: string, password: string) =>
-      supabase.auth.signInWithPassword({ email, password }),
-    signUp: (email: string, password: string) =>
-      supabase.auth.signUp({ email, password }),
-    signOut: () => supabase.auth.signOut(),
+    session: user ? { user: { email: user.email } } : null,
+    loading: isLoading,
+    email: user?.email ?? null,
+    signIn: async (email: string, password: string) => {
+      await loginFn({ data: { email, password } });
+      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
+    signUp: async (_email: string, _password: string) => {
+      throw new Error("Sign-up is disabled. Ask the site owner to add an admin account.");
+    },
+    signOut: async () => {
+      await logoutFn();
+      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
   };
 }
